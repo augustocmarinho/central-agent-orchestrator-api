@@ -1,0 +1,11 @@
+{
+  "id": "plugin.echo",
+  "name": "Echo",
+  "category": "utilitario",
+  "description": "Plugin de exemplo que repete a mensagem recebida",
+  "version": "1.0.0",
+  "auth_type": "none",
+  "supports_sandbox": true,
+  "config_schema": [],
+  "depends_on": []
+}

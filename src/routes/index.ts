@@ -1,0 +1,54 @@
+import { Router } from 'express';
+import { authController } from '../controllers/auth.controller';
+import { agentController } from '../controllers/agent.controller';
+import { pluginController } from '../controllers/plugin.controller';
+import { chatController } from '../controllers/chat.controller';
+import { systemTokenController } from '../controllers/systemToken.controller';
+import { authMiddleware } from '../middleware/auth';
+import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
+
+const router = Router();
+
+// Health check
+router.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Auth routes
+router.post('/auth/login', authController.login.bind(authController));
+router.post('/auth/register', authController.register.bind(authController));
+router.get('/auth/me', authMiddleware, authController.me.bind(authController));
+
+// Agent routes - accessible by users and system (N8N)
+router.post('/agents', authMiddleware, agentController.create.bind(agentController));
+router.get('/agents', authMiddleware, agentController.list.bind(agentController));
+// Allow system access to get agent details (for N8N)
+router.get('/agents/:id', flexibleAuthMiddleware, agentController.getOne.bind(agentController));
+router.put('/agents/:id', authMiddleware, agentController.update.bind(agentController));
+router.delete('/agents/:id', authMiddleware, agentController.delete.bind(agentController));
+
+// Plugin routes
+router.get('/plugins', authMiddleware, pluginController.list.bind(pluginController));
+router.get('/plugins/:id', authMiddleware, pluginController.getOne.bind(pluginController));
+router.get('/agents/:agentId/plugins', flexibleAuthMiddleware, pluginController.listAgentPlugins.bind(pluginController));
+router.post('/agents/:agentId/plugins', authMiddleware, pluginController.install.bind(pluginController));
+router.delete('/agents/:agentId/plugins/:pluginId', authMiddleware, pluginController.uninstall.bind(pluginController));
+
+// Chat routes
+router.post('/chat/message', authMiddleware, chatController.sendMessage.bind(chatController));
+router.get('/chat/conversations/:id', flexibleAuthMiddleware, chatController.getConversation.bind(chatController));
+router.get('/agents/:agentId/conversations', flexibleAuthMiddleware, chatController.listConversations.bind(chatController));
+
+// System Token routes - admin only
+router.post('/system-tokens', authMiddleware, systemTokenController.create.bind(systemTokenController));
+router.get('/system-tokens', authMiddleware, systemTokenController.list.bind(systemTokenController));
+router.get('/system-tokens/:id', authMiddleware, systemTokenController.getById.bind(systemTokenController));
+router.delete('/system-tokens/:id', authMiddleware, systemTokenController.revoke.bind(systemTokenController));
+router.put('/system-tokens/:id/allowed-ips', authMiddleware, systemTokenController.updateAllowedIps.bind(systemTokenController));
+router.get('/system-tokens/:id/logs', authMiddleware, systemTokenController.getLogs.bind(systemTokenController));
+
+export default router;

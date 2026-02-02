@@ -1,0 +1,967 @@
+{
+  "info": {
+    "name": "AI Agents Backend",
+    "description": "Collection completa para a API do sistema de Agentes de IA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "ai-agents-backend"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "agentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conversationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pluginId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "systemToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "systemTokenId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Check API Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Verifica se a API está funcionando corretamente"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.user) {",
+                  "        pm.environment.set('userId', response.data.user.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"João Silva\",\n  \"email\": \"joao.silva@example.com\",\n  \"password\": \"senha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registra um novo usuário no sistema. A senha deve ter no mínimo 6 caracteres, conter pelo menos uma letra e um número."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('token', response.data.token);",
+                  "        console.log('Token salvo com sucesso!');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Realiza login e retorna um token JWT. Use as credenciais padrão:\n- Email: admin@example.com\n- Senha: admin123"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Retorna as informações do usuário autenticado"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "item": [
+        {
+          "name": "Create Agent - Simple Mode",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.agent) {",
+                  "        pm.collectionVariables.set('agentId', response.data.agent.id);",
+                  "        console.log('Agent ID salvo: ' + response.data.agent.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sofia - Assistente Virtual\",\n  \"creationMode\": \"simple\",\n  \"objective\": \"Ajudar clientes com dúvidas sobre produtos e serviços\",\n  \"persona\": \"Assistente virtual amigável e prestativa\",\n  \"audience\": \"Clientes da loja online\",\n  \"topics\": \"Produtos, serviços, pedidos, entregas, pagamentos\",\n  \"restrictions\": \"Não fornecer informações sobre preços sem verificar o catálogo\",\n  \"knowledgeSource\": \"Base de conhecimento da empresa\",\n  \"useAI\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents"]
+            },
+            "description": "Cria um agente no modo simplificado. O sistema gerará automaticamente o prompt final baseado nos campos estruturados."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Agent - Advanced Mode",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.agent) {",
+                  "        pm.collectionVariables.set('agentId', response.data.agent.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Carlos - Especialista Técnico\",\n  \"creationMode\": \"advanced\",\n  \"finalPrompt\": \"Você é Carlos, um especialista técnico altamente qualificado. Sua função é fornecer suporte técnico detalhado para desenvolvedores. Você deve:\\n\\n1. Analisar problemas técnicos com precisão\\n2. Fornecer soluções baseadas em melhores práticas\\n3. Explicar conceitos complexos de forma clara\\n4. Sempre validar suas respostas\\n\\nTom: Profissional, técnico mas acessível\\nLimites: Não fornecer informações sobre infraestrutura interna da empresa\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents"]
+            },
+            "description": "Cria um agente no modo avançado, onde você define diretamente o prompt final."
+          },
+          "response": []
+        },
+        {
+          "name": "List Agents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents"]
+            },
+            "description": "Lista todos os agentes do usuário autenticado"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            },
+            "description": "Busca um agente específico pelo ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Agent",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sofia - Assistente Virtual Atualizada\",\n  \"status\": \"active\",\n  \"objective\": \"Ajudar clientes com dúvidas sobre produtos, serviços e suporte técnico\",\n  \"persona\": \"Assistente virtual muito amigável e extremamente prestativa\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            },
+            "description": "Atualiza um agente existente. Todos os campos são opcionais. Status pode ser: active, paused, draft"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Agent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            },
+            "description": "Remove um agente do sistema"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Plugins",
+      "item": [
+        {
+          "name": "List All Plugins",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "plugins"]
+            },
+            "description": "Lista todos os plugins disponíveis no sistema (catálogo)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Plugin by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/plugins/{{pluginId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "plugins", "{{pluginId}}"]
+            },
+            "description": "Busca detalhes de um plugin específico"
+          },
+          "response": []
+        },
+        {
+          "name": "List Agent Plugins",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/plugins",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "plugins"]
+            },
+            "description": "Lista todos os plugins instalados em um agente específico"
+          },
+          "response": []
+        },
+        {
+          "name": "Install Plugin - Echo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('Plugin instalado com sucesso!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pluginId\": \"echo\",\n  \"isSandbox\": false,\n  \"config\": {\n    \"prefix\": \"[Echo]\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/plugins",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "plugins"]
+            },
+            "description": "Instala o plugin Echo no agente. Este plugin simplesmente repete as mensagens recebidas."
+          },
+          "response": []
+        },
+        {
+          "name": "Install Plugin - Calendar Fake",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pluginId\": \"calendar_fake\",\n  \"isSandbox\": true,\n  \"config\": {\n    \"maxEvents\": 50,\n    \"defaultDuration\": 60\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/plugins",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "plugins"]
+            },
+            "description": "Instala o plugin Calendar Fake no agente. Este plugin simula um sistema de agendamento em memória."
+          },
+          "response": []
+        },
+        {
+          "name": "Uninstall Plugin",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/plugins/{{pluginId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "plugins", "{{pluginId}}"]
+            },
+            "description": "Remove um plugin de um agente"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Send Message (New Conversation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.conversationId) {",
+                  "        pm.collectionVariables.set('conversationId', response.data.conversationId);",
+                  "        console.log('Conversation ID salvo: ' + response.data.conversationId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"content\": \"Olá! Preciso de ajuda com meu pedido.\",\n  \"channel\": \"web\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/message",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "message"]
+            },
+            "description": "Envia uma mensagem para um agente, criando uma nova conversa. O sistema retorna a resposta do agente."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message (Existing Conversation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"conversationId\": \"{{conversationId}}\",\n  \"content\": \"Qual o status do meu pedido #12345?\",\n  \"channel\": \"web\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/message",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "message"]
+            },
+            "description": "Continua uma conversa existente enviando uma nova mensagem"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "conversations", "{{conversationId}}"]
+            },
+            "description": "Busca o histórico completo de uma conversa com todas as mensagens"
+          },
+          "response": []
+        },
+        {
+          "name": "List Agent Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/conversations?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "conversations"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Número máximo de conversas a retornar (padrão: 50)"
+                }
+              ]
+            },
+            "description": "Lista todas as conversas de um agente específico"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System Tokens",
+      "item": [
+        {
+          "name": "Create System Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('systemToken', response.data.token.token);",
+                  "        pm.collectionVariables.set('systemTokenId', response.data.token.id);",
+                  "        console.log('System Token salvo: ' + response.data.token.token);",
+                  "        console.log('System Token ID: ' + response.data.token.id);",
+                  "        console.log('⚠️ IMPORTANTE: Guarde este token em local seguro!');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"N8N Production\",\n  \"description\": \"Token de sistema para integração com N8N\",\n  \"allowed_ips\": [\"192.168.1.100\", \"10.0.0.0/8\"],\n  \"expires_at\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens"]
+            },
+            "description": "Cria um novo token de sistema para integração com N8N ou outros sistemas. Requer permissão de ADMIN.\n\n**Campos:**\n- `name`: Nome identificador do token\n- `description`: Descrição do uso\n- `allowed_ips`: Array de IPs permitidos (IP exato, CIDR ou wildcard). Deixe vazio para permitir todos os IPs.\n- `expires_at`: Data de expiração (ISO 8601) ou null para nunca expirar\n\n**Formatos de IP suportados:**\n- IP exato: `\"192.168.1.100\"`\n- CIDR: `\"10.0.0.0/8\"`, `\"192.168.1.0/24\"`\n- Wildcard: `\"192.168.1.*\"`\n\n⚠️ O token completo só é exibido na criação!"
+          },
+          "response": []
+        },
+        {
+          "name": "Create System Token (No IP Restriction)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.token) {",
+                  "        pm.collectionVariables.set('systemToken', response.data.token.token);",
+                  "        pm.collectionVariables.set('systemTokenId', response.data.token.id);",
+                  "        console.log('System Token salvo: ' + response.data.token.token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"N8N Development\",\n  \"description\": \"Token de desenvolvimento sem restrição de IP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens"]
+            },
+            "description": "Cria um token sem restrição de IP (útil para desenvolvimento). Não recomendado para produção!"
+          },
+          "response": []
+        },
+        {
+          "name": "List System Tokens",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens"]
+            },
+            "description": "Lista todos os tokens de sistema. Requer permissão de ADMIN.\n\nRetorna informações sobre os tokens, mas NÃO retorna o valor do token (por segurança)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get System Token by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens/{{systemTokenId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens", "{{systemTokenId}}"]
+            },
+            "description": "Busca informações de um token específico. Requer permissão de ADMIN.\n\nNÃO retorna o valor do token por segurança."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Allowed IPs",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"allowed_ips\": [\"192.168.1.100\", \"192.168.1.101\", \"10.0.0.0/8\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens/{{systemTokenId}}/allowed-ips",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens", "{{systemTokenId}}", "allowed-ips"]
+            },
+            "description": "Atualiza a lista de IPs permitidos para um token. Requer permissão de ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Token Usage Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens/{{systemTokenId}}/logs?limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens", "{{systemTokenId}}", "logs"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Número máximo de logs a retornar (padrão: 100)"
+                }
+              ]
+            },
+            "description": "Retorna os logs de uso de um token específico. Requer permissão de ADMIN.\n\nÚtil para auditoria e detecção de uso suspeito."
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke System Token",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/system-tokens/{{systemTokenId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "system-tokens", "{{systemTokenId}}"]
+            },
+            "description": "Revoga (desativa) um token de sistema. Requer permissão de ADMIN.\n\nO token deixa de funcionar imediatamente."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "N8N Integration Examples",
+      "item": [
+        {
+          "name": "Get Agent (Using System Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-System-API-Key",
+                "value": "{{systemToken}}",
+                "description": "Token de sistema para autenticação"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}"]
+            },
+            "description": "Exemplo de como o N8N deve acessar a API usando um System Token.\n\nUse o header `X-System-API-Key` ao invés de `Authorization: Bearer`.\n\n**No N8N:**\n1. HTTP Request Node\n2. Authentication: None\n3. Headers:\n   - Name: `X-System-API-Key`\n   - Value: `{{seu-token-aqui}}`"
+          },
+          "response": []
+        },
+        {
+          "name": "List Agents (Using System Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-System-API-Key",
+                "value": "{{systemToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents"]
+            },
+            "description": "Lista agentes usando System Token. \n\n⚠️ Este endpoint normalmente requer autenticação de usuário, mas com System Token você tem acesso como sistema."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Agent Plugins (Using System Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-System-API-Key",
+                "value": "{{systemToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agents/{{agentId}}/plugins",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agents", "{{agentId}}", "plugins"]
+            },
+            "description": "Lista plugins de um agente usando System Token."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Conversation (Using System Token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-System-API-Key",
+                "value": "{{systemToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "chat", "conversations", "{{conversationId}}"]
+            },
+            "description": "Busca uma conversa usando System Token."
+          },
+          "response": []
+        },
+        {
+          "name": "N8N Setup Instructions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "# Como Configurar N8N com System Tokens\n\n## 1. Criar o Token\n\n### Via Script (Recomendado)\n```bash\ncd back\nnpm run setup:n8n-token\n```\n\n### Ou via API\nUse a requisição \"Create System Token\" desta coleção.\n\n## 2. Copiar o Token\n\nO token será exibido no formato:\n```\nsat_abc123def456...\n```\n\n⚠️ **IMPORTANTE:** Guarde este token em local seguro! Ele não será exibido novamente.\n\n## 3. Configurar no N8N\n\n### Método 1: Variável de Ambiente (Recomendado)\n\n1. No N8N, vá em **Settings → Environment Variables**\n2. Adicione uma nova variável:\n   - Name: `BACKEND_API_TOKEN`\n   - Value: `sat_abc123...` (seu token)\n\n3. No HTTP Request Node:\n   - URL: `http://localhost:3000/api/agents/123`\n   - Authentication: **None**\n   - Headers:\n     - Name: `X-System-API-Key`\n     - Value: `{{$env.BACKEND_API_TOKEN}}`\n\n### Método 2: Credentials (Alternativo)\n\n1. Crie uma nova Credential do tipo **Header Auth**\n2. Configure:\n   - Name: `X-System-API-Key`\n   - Value: `sat_abc123...` (seu token)\n\n3. No HTTP Request Node:\n   - URL: `http://localhost:3000/api/agents/123`\n   - Authentication: **Header Auth**\n   - Credential: Selecione a credential criada\n\n## 4. Endpoints Disponíveis\n\nCom o System Token, você pode acessar:\n\n- ✅ `GET /api/agents` - Listar agentes\n- ✅ `GET /api/agents/:id` - Buscar agente\n- ✅ `GET /api/agents/:id/plugins` - Listar plugins do agente\n- ✅ `GET /api/chat/conversations/:id` - Buscar conversa\n- ✅ `GET /api/agents/:id/conversations` - Listar conversas do agente\n\n## 5. Segurança\n\n### Restrição por IP (Produção)\n\nPara maior segurança, restrinja o token ao IP do servidor N8N:\n\n```bash\n# Descobrir IP do servidor N8N\ncurl https://api.ipify.org\n\n# Criar token com restrição\nN8N_ALLOWED_IPS=\"192.168.1.100\" npm run setup:n8n-token\n```\n\nOu atualize via API usando a requisição \"Update Allowed IPs\".\n\n### Formatos de IP Suportados\n\n- **IP exato:** `192.168.1.100`\n- **CIDR:** `10.0.0.0/8`, `192.168.1.0/24`\n- **Wildcard:** `192.168.1.*`\n- **Múltiplos:** `[\"192.168.1.100\", \"10.0.0.0/8\"]`\n\n## 6. Monitoramento\n\n### Ver logs de uso\n\nUse a requisição \"Get Token Usage Logs\" para ver:\n- Todos os acessos\n- IPs de origem\n- Endpoints acessados\n- Timestamps\n\n### Revogar token\n\nSe necessário, use \"Revoke System Token\" para desativar imediatamente.\n\n## 7. Troubleshooting\n\n### \"API Key inválida\"\n- Verifique se o token está correto\n- Verifique se o token não foi revogado\n- Liste tokens ativos: \"List System Tokens\"\n\n### \"Unauthorized IP\"\n- IP do N8N não está na lista permitida\n- Atualize os IPs: \"Update Allowed IPs\"\n\n### Token não funciona\n- Verifique se está usando o header correto: `X-System-API-Key`\n- Verifique se o backend está rodando: `GET /api/health`\n\n## Documentação Completa\n\nVer arquivos:\n- `back/README_SYSTEM_TOKENS.md` - Guia rápido\n- `back/SYSTEM_TOKENS.md` - Documentação completa\n- `back/ARCHITECTURE_SYSTEM_TOKENS.md` - Arquitetura detalhada"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "WebSocket Examples",
+      "item": [
+        {
+          "name": "WebSocket Connection Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "# WebSocket Chat\n\nPara conectar ao WebSocket:\n\n```bash\n# Instale wscat globalmente\nnpm install -g wscat\n\n# Conecte ao WebSocket\nwscat -c \"ws://localhost:3000/ws/chat?token=SEU_TOKEN_JWT_AQUI\"\n```\n\n## Mensagens disponíveis:\n\n### 1. Entrar em uma conversa\n```json\n{\n  \"type\": \"join\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\"\n  }\n}\n```\n\n### 2. Enviar mensagem\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"content\": \"Olá, preciso de ajuda!\"\n  }\n}\n```\n\n### 3. Continuar conversa existente\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"conversationId\": \"uuid-da-conversa\",\n    \"content\": \"Mais uma pergunta...\"\n  }\n}\n```\n\n### 4. Sair da conversa\n```json\n{\n  \"type\": \"leave\"\n}\n```\n\n### 5. Heartbeat (mantém conexão viva)\n```json\n{\n  \"type\": \"ping\"\n}\n```\n\nO servidor responderá automaticamente com `pong`.\n\n## Eventos recebidos do servidor:\n\n- `joined`: Confirmação de entrada na conversa\n- `message`: Nova mensagem (do usuário ou do agente)\n- `agent_response`: Resposta específica do agente\n- `error`: Erro ocorrido\n- `pong`: Resposta ao ping"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ]
+}
