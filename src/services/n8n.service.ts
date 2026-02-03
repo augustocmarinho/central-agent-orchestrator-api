@@ -186,6 +186,38 @@ export class N8nService {
       };
     }
   }
+
+  /**
+   * Chama o workflow "OpenAI Chat with Redis" específico
+   * Usado pelo sistema de filas
+   */
+  async callOpenAIChatWorkflow(data: {
+    agent_id: string;
+    message: string;
+    conversation_id: string;
+  }): Promise<any> {
+    try {
+      console.log('🤖 Chamando N8N workflow: OpenAI Chat with Redis');
+      
+      const response = await axios.post(
+        `${this.baseUrl}/webhook/openai-chat`,
+        data,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 90000, // 90 segundos (OpenAI pode demorar)
+        }
+      );
+      
+      console.log('✅ N8N workflow concluído');
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Erro ao chamar N8N workflow:', error.message);
+      throw error;
+    }
+  }
 }
 
 export const n8nService = new N8nService();

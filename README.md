@@ -12,6 +12,8 @@ Este é o backend de uma plataforma onde cada usuário pode criar e gerenciar m�
 - **n8n** é a engine de execução de IA e workflows
 - **PostgreSQL** armazena dados estruturais (usuários, agentes, plugins)
 - **MongoDB** armazena dados operacionais (conversas, mensagens, logs)
+- **Redis** gerencia filas de mensagens e cache
+- **Bull** processa mensagens de forma assíncrona
 - **WebSocket** fornece chat em tempo real
 
 ## 🚀 Começando
@@ -21,6 +23,7 @@ Este é o backend de uma plataforma onde cada usuário pode criar e gerenciar m�
 - Node.js 18+ 
 - PostgreSQL 14+
 - MongoDB 6+
+- Redis 7+
 - n8n (opcional, para funcionalidade completa)
 
 ### Instalação
@@ -59,6 +62,11 @@ POSTGRES_DB=ai_agents
 
 # MongoDB Configuration
 MONGODB_URI=mongodb://localhost:27017/ai_agents
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
 
 # JWT Configuration
 JWT_SECRET=sua-chave-secreta-super-segura
@@ -140,9 +148,16 @@ O servidor estará rodando em `http://localhost:3000`
 
 ### Chat
 
-- `POST /api/chat/message` - Enviar mensagem (REST)
+- `POST /api/chat/message` - Enviar mensagem (REST - síncrono, legado)
 - `GET /api/chat/conversations/:id` - Buscar conversação
 - `GET /api/agents/:agentId/conversations` - Listar conversações do agente
+
+### Mensagens (Assíncrono) 🆕
+
+- `POST /api/messages` - Enviar mensagem (assíncrono via filas)
+- `GET /api/messages/:messageId/status` - Status da mensagem
+- `GET /api/messages/queue/stats` - Estatísticas da fila
+- `GET /api/messages/queue/health` - Health check do sistema de filas
 
 ### WebSocket
 
@@ -214,31 +229,36 @@ src/plugins/nome_plugin/
 3. Implemente o `handler.ts`
 4. Registre em `src/plugins/index.ts`
 
-## 🔄 Fluxo de Chat
+## 🔄 Fluxo de Chat (Assíncrono)
 
-```mermaid
-graph LR
-    A[Front] --> B[Node.js]
-    B --> C[Busca Agente]
-    B --> D[Busca Histórico]
-    B --> E[Busca Plugins]
-    C --> F[n8n]
-    D --> F
-    E --> F
-    F --> G[LLM]
-    G --> H[Resposta]
-    H --> B
-    B --> I[Salva no Mongo]
-    B --> A
+```
+Cliente → POST /api/messages → Node.js (202 Accepted) 
+                                    ↓
+                               Redis (Bull Queue)
+                                    ↓
+                            Worker/Consumer (background)
+                        ↓                    ↓
+                   Busca Agente          Busca Histórico
+                        ↓                    ↓
+                            Chama N8N → OpenAI
+                                    ↓
+                            Redis PubSub (resposta)
+                                    ↓
+                              Subscriber
+                    ↓               ↓              ↓
+              WebSocket         WhatsApp       Telegram
+                    ↓               ↓              ↓
+               Cliente Web    Cliente WhatsApp  Cliente Telegram
 ```
 
-1. Frontend envia mensagem via WebSocket
-2. Node.js identifica usuário e agente
-3. Busca configurações, histórico e plugins
-4. Chama n8n com contexto completo
-5. n8n decide qual LLM usar e executa
-6. Resposta retorna para Node.js
-7. Node.js salva logs e envia resposta ao front
+**Principais vantagens:**
+- ✅ Cliente recebe resposta imediata (< 50ms)
+- ✅ Processamento em background (não bloqueia)
+- ✅ Retry automático em falhas
+- ✅ Suporta múltiplos canais simultaneamente
+- ✅ Escalável horizontalmente
+
+**Documentação completa:** [MESSAGING_ARCHITECTURE.md](./docs/MESSAGING_ARCHITECTURE.md)
 
 ## 🗄️ Banco de Dados
 
@@ -346,6 +366,8 @@ src/
 ├── app.ts                 # Configuração do Express
 ├── server.ts             # Inicialização do servidor
 ├── config/               # Configurações
+│   ├── index.ts
+│   └── redis.config.ts   # 🆕 Config Redis
 ├── db/                   # Banco de dados
 │   ├── postgres.ts
 │   ├── mongodb.ts
@@ -357,11 +379,20 @@ src/
 │   ├── agent.service.ts
 │   ├── plugin.service.ts
 │   ├── chat.service.ts
+│   ├── queue.service.ts  # 🆕 Orquestração de filas
 │   └── n8n.service.ts
 ├── controllers/          # Controllers REST
+│   └── message.controller.ts  # 🆕 Controller de mensagens assíncronas
 ├── routes/               # Rotas da API
 ├── middleware/           # Middlewares
 ├── websocket/            # WebSocket server
+├── queues/               # 🆕 Sistema de filas
+│   ├── producers/        # Produtores de jobs
+│   ├── consumers/        # Consumidores de jobs
+│   ├── pubsub/           # Sistema PubSub
+│   └── handlers/         # Handlers de entrega por canal
+├── types/                # 🆕 TypeScript types
+│   └── queue.types.ts
 ├── auth/                 # Autenticação
 ├── plugins/              # Plugins do sistema
 │   ├── echo/

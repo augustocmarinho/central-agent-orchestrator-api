@@ -2,13 +2,16 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { chatService } from '../services/chat.service';
 import { verifyToken } from '../auth/jwt';
+import { WebHandler } from '../queues/handlers/web.handler';
 import url from 'url';
+import { v4 as uuidv4 } from 'uuid';
 
 interface WebSocketClient extends WebSocket {
   userId?: string;
   agentId?: string;
   conversationId?: string;
   isAlive?: boolean;
+  socketId?: string; // ID único para identificar a conexão
 }
 
 export class ChatWebSocketServer {
@@ -29,6 +32,10 @@ export class ChatWebSocketServer {
         ws.close(1008, 'Não autorizado');
         return;
       }
+      
+      // Gerar socketId único e registrar no handler
+      ws.socketId = uuidv4();
+      WebHandler.registerConnection(ws.socketId, ws);
       
       ws.isAlive = true;
       
@@ -51,12 +58,19 @@ export class ChatWebSocketServer {
       // Desconexão
       ws.on('close', () => {
         console.log('🔌 Conexão WebSocket fechada');
+        // Remover do handler
+        if (ws.socketId) {
+          WebHandler.unregisterConnection(ws.socketId);
+        }
       });
       
       // Enviar confirmação de conexão
       this.sendMessage(ws, {
         type: 'connected',
-        data: { message: 'Conectado ao chat' },
+        data: { 
+          message: 'Conectado ao chat',
+          socketId: ws.socketId 
+        },
       });
     });
     
@@ -103,6 +117,11 @@ export class ChatWebSocketServer {
         // Entrar em uma conversa
         ws.agentId = data.agentId;
         ws.conversationId = data.conversationId;
+        console.log('📍 WebSocket joined conversation', { 
+          socketId: ws.socketId,
+          conversationId: data.conversationId,
+          agentId: data.agentId 
+        });
         this.sendMessage(ws, {
           type: 'joined',
           data: { agentId: data.agentId, conversationId: data.conversationId },
@@ -129,33 +148,67 @@ export class ChatWebSocketServer {
         return this.sendError(ws, 'agentId e content são obrigatórios');
       }
       
-      // Notificar que está processando
+      // Validar scheduledFor se fornecido
+      let scheduledDate: Date | undefined;
+      if (data.scheduledFor) {
+        scheduledDate = new Date(data.scheduledFor);
+        if (isNaN(scheduledDate.getTime())) {
+          return this.sendError(ws, 'scheduledFor deve ser uma data válida (ISO 8601)');
+        }
+        if (scheduledDate < new Date()) {
+          return this.sendError(ws, 'scheduledFor deve ser uma data futura');
+        }
+      }
+      
+      // Notificar que está enfileirando ou agendando
       this.sendMessage(ws, {
-        type: 'processing',
-        data: { message: 'Processando sua mensagem...' },
+        type: scheduledDate ? 'scheduled' : 'queued',
+        data: { 
+          message: scheduledDate 
+            ? `Mensagem agendada para ${scheduledDate.toISOString()}` 
+            : 'Mensagem recebida, processando...',
+          scheduledFor: scheduledDate?.toISOString()
+        },
       });
       
+      // Enviar para fila (retorna imediatamente ou agenda)
       const result = await chatService.sendMessage({
         agentId: data.agentId,
         userId: ws.userId,
         content: data.content,
         conversationId: ws.conversationId || data.conversationId,
-        channel: 'webchat',
+        channel: 'web',
+        channelMetadata: {
+          websocketId: ws.socketId, // Importante: passa o socketId para delivery
+        },
+        scheduledFor: scheduledDate, // Passa o scheduledFor!
       });
       
       // Atualizar conversationId se for nova
       if (!ws.conversationId) {
         ws.conversationId = result.conversationId;
+        console.log('📍 WebSocket conversationId updated', { 
+          socketId: ws.socketId,
+          conversationId: result.conversationId 
+        });
       }
       
-      // Enviar resposta
+      // Confirmar que mensagem foi enfileirada ou agendada
       this.sendMessage(ws, {
-        type: 'message',
+        type: result.status === 'scheduled' ? 'scheduled' : 'processing',
         data: {
           conversationId: result.conversationId,
-          message: result.message,
+          messageId: result.messageId,
+          jobId: result.jobId,
+          status: result.status,
+          scheduledFor: result.scheduledFor?.toISOString(),
+          message: result.status === 'scheduled' 
+            ? `Mensagem agendada para ${result.scheduledFor?.toISOString()}`
+            : 'Sua mensagem está sendo processada...',
         },
       });
+
+      // A resposta será enviada automaticamente pelo WebHandler quando o job completar
     } catch (error: any) {
       console.error('Erro ao processar mensagem do chat:', error);
       this.sendError(ws, error.message || 'Erro ao processar mensagem');

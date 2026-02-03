@@ -4,6 +4,9 @@ import { Execution } from '../models/mongodb/Execution';
 import { agentService } from './agent.service';
 import { pluginService } from './plugin.service';
 import { n8nService } from './n8n.service';
+import { queueService } from './queue.service';
+import { v4 as uuidv4 } from 'uuid';
+import { logInfo } from '../utils/logger';
 
 export interface SendMessageData {
   agentId: string;
@@ -11,10 +14,59 @@ export interface SendMessageData {
   content: string;
   conversationId?: string;
   channel?: string;
+  channelMetadata?: any;
+  scheduledFor?: Date;
 }
 
 export class ChatService {
+  /**
+   * Envia mensagem usando sistema de filas (assíncrono)
+   * Retorna imediatamente com status "queued"
+   * 
+   * IMPORTANTE: Não usa MongoDB! O histórico fica 100% no Redis (gerenciado pelo N8N)
+   */
   async sendMessage(data: SendMessageData): Promise<any> {
+    try {
+      // 1. Validar que agente existe (apenas validação, não precisa buscar dados)
+      const agent = await agentService.getAgentById(data.agentId, data.userId || '');
+      if (!agent) {
+        throw new Error('Agente não encontrado');
+      }
+
+      // 2. Gerar conversationId se não foi fornecido
+      // O conversationId é apenas um UUID, não precisa estar no MongoDB
+      const conversationId = data.conversationId || uuidv4();
+
+      // 3. Enfileirar mensagem para processamento assíncrono (ou agendar)
+      const result = await queueService.enqueueMessage({
+        conversationId,
+        agentId: data.agentId,
+        userId: data.userId || '',
+        message: data.content,
+        channel: (data.channel as any) || 'web',
+        channelMetadata: data.channelMetadata || {},
+        scheduledFor: data.scheduledFor,
+      });
+
+      // 4. Retornar imediatamente (202 Accepted)
+      return {
+        conversationId,
+        messageId: result.messageId,
+        jobId: result.jobId,
+        status: 'processing',
+        message: 'Mensagem recebida e em processamento',
+      };
+    } catch (error: any) {
+      console.error('Erro ao enfileirar mensagem:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Versão síncrona da sendMessage (para compatibilidade/testes)
+   * @deprecated Use sendMessage (assíncrono) sempre que possível
+   */
+  async sendMessageSync(data: SendMessageData): Promise<any> {
     try {
       // 1. Buscar ou criar conversação
       let conversation;
@@ -117,7 +169,20 @@ export class ChatService {
         executionId: execution._id.toString(),
       };
     } catch (error: any) {
-      console.error('Erro ao processar mensagem:', error);
+      console.error('Erro ao processar mensagem (sync):', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Busca status de uma mensagem em processamento
+   */
+  async getMessageStatus(messageId: string): Promise<any> {
+    try {
+      const status = await queueService.getMessageStatus(messageId);
+      return status;
+    } catch (error: any) {
+      console.error('Erro ao buscar status da mensagem:', error);
       throw error;
     }
   }

@@ -40,6 +40,16 @@
       "key": "systemTokenId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "messageId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "socketId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -491,10 +501,206 @@
       ]
     },
     {
-      "name": "Chat",
+      "name": "Async Messaging (NEW)",
+      "description": "Sistema de mensageria assíncrona com filas, Pub/Sub e WebSocket. Use estes endpoints para integração moderna e escalável.",
       "item": [
         {
-          "name": "Send Message (New Conversation)",
+          "name": "Send Message (Async - New Conversation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data) {",
+                  "        pm.collectionVariables.set('conversationId', response.data.conversationId);",
+                  "        pm.collectionVariables.set('messageId', response.data.messageId);",
+                  "        console.log('✅ Conversation ID: ' + response.data.conversationId);",
+                  "        console.log('✅ Message ID: ' + response.data.messageId);",
+                  "        console.log('📊 Status: ' + response.data.status);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"message\": \"Olá! Preciso de ajuda com meu pedido.\",\n  \"channel\": \"web\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages"]
+            },
+            "description": "**[RECOMENDADO]** Envia uma mensagem de forma assíncrona usando sistema de filas.\n\n**Retorna imediatamente (202 Accepted)** com:\n- `messageId`: ID da mensagem para rastreamento\n- `conversationId`: ID da conversa (novo ou existente)\n- `jobId`: ID do job na fila\n- `status`: Estado atual (processing)\n\n**Recebimento da resposta:**\n- Via WebSocket: Automático se conectado\n- Via Polling: Use GET /api/messages/:messageId/status\n- Via Callback: Configure channelMetadata.callbackUrl"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message (Async - Existing Conversation)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data) {",
+                  "        pm.collectionVariables.set('messageId', response.data.messageId);",
+                  "        console.log('✅ Message ID: ' + response.data.messageId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"conversationId\": \"{{conversationId}}\",\n  \"message\": \"Qual o status do meu pedido #12345?\",\n  \"channel\": \"web\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages"]
+            },
+            "description": "Continua uma conversa existente. A resposta será entregue via WebSocket para TODOS os clientes conectados nessa conversa (broadcast por conversationId)."
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message with WebSocket ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    const response = pm.response.json();",
+                  "    console.log('✅ Mensagem enfileirada! Use o socketId para receber via WebSocket específico.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"conversationId\": \"{{conversationId}}\",\n  \"message\": \"Mensagem enviada via POST mas recebida via WebSocket\",\n  \"channel\": \"web\",\n  \"channelMetadata\": {\n    \"websocketId\": \"{{socketId}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages"]
+            },
+            "description": "Envia mensagem via POST mas com socketId específico. A resposta será entregue diretamente para esse WebSocket.\n\n**Quando usar:**\n- Integração híbrida REST + WebSocket\n- Cliente tem múltiplas conexões\n- Quer garantir entrega em socket específico\n\n**Como obter socketId:**\n1. Conecte WebSocket\n2. Receba evento: `{\"type\": \"connected\", \"data\": {\"socketId\": \"abc-123\"}}`\n3. Use esse socketId aqui"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Message Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/{{messageId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages", "{{messageId}}", "status"]
+            },
+            "description": "Verifica o status de processamento de uma mensagem.\n\n**Estados possíveis:**\n- `waiting`: Na fila, aguardando processamento\n- `active`: Sendo processado agora\n- `completed`: Processado com sucesso\n- `failed`: Erro no processamento\n- `delayed`: Agendado para futuro\n- `stuck`: Worker travou (raro)\n\n**Informações retornadas:**\n- `state`: Estado atual\n- `progress`: Progresso (0-100)\n- `failedReason`: Motivo de falha (se aplicável)\n- `processedOn`: Timestamp de início\n- `finishedOn`: Timestamp de conclusão"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Queue Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/queue/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages", "queue", "stats"]
+            },
+            "description": "Retorna estatísticas da fila de processamento.\n\n**Métricas incluídas:**\n- `waiting`: Mensagens aguardando processamento\n- `active`: Mensagens sendo processadas agora\n- `completed`: Total de mensagens completadas\n- `failed`: Total de mensagens com falha\n- `delayed`: Mensagens agendadas\n- `paused`: Fila pausada (se aplicável)\n\n**Útil para:**\n- Monitoramento de performance\n- Detecção de gargalos\n- Dashboards de status"
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/queue/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "messages", "queue", "health"]
+            },
+            "description": "Verifica a saúde do sistema de filas.\n\n**Retorna:**\n- `healthy`: true/false\n- `stats`: Estatísticas atuais\n- `error`: Mensagem de erro (se não saudável)\n\n**Status HTTP:**\n- 200: Sistema saudável\n- 503: Sistema com problemas\n\n**Use para:**\n- Health checks de load balancer\n- Monitoramento (Prometheus, Datadog)\n- Alertas automáticos"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat (Legacy)",
+      "description": "⚠️ LEGACY: Endpoints síncronos antigos. Use 'Async Messaging' para nova implementação.",
+      "item": [
+        {
+          "name": "[LEGACY] Send Message Sync (New Conversation)",
           "event": [
             {
               "listen": "test",
@@ -533,12 +739,12 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "chat", "message"]
             },
-            "description": "Envia uma mensagem para um agente, criando uma nova conversa. O sistema retorna a resposta do agente."
+            "description": "⚠️ **LEGACY - Síncrono**\n\nEnvia uma mensagem de forma SÍNCRONA (espera resposta completa).\n\n**Problemas:**\n- Timeout se LLM demorar >30s\n- Não escalável\n- Bloqueia conexão HTTP\n\n**Migre para:** POST /api/messages (assíncrono)"
           },
           "response": []
         },
         {
-          "name": "Send Message (Existing Conversation)",
+          "name": "[LEGACY] Send Message Sync (Existing Conversation)",
           "request": {
             "method": "POST",
             "header": [
@@ -560,7 +766,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "chat", "message"]
             },
-            "description": "Continua uma conversa existente enviando uma nova mensagem"
+            "description": "⚠️ **LEGACY - Síncrono**\n\nContinua uma conversa de forma SÍNCRONA.\n\n**Migre para:** POST /api/messages (assíncrono)"
           },
           "response": []
         },
@@ -579,7 +785,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "chat", "conversations", "{{conversationId}}"]
             },
-            "description": "Busca o histórico completo de uma conversa com todas as mensagens"
+            "description": "Busca o histórico completo de uma conversa com todas as mensagens do MongoDB."
           },
           "response": []
         },
@@ -605,7 +811,7 @@
                 }
               ]
             },
-            "description": "Lista todas as conversas de um agente específico"
+            "description": "Lista todas as conversas de um agente específico do MongoDB."
           },
           "response": []
         }
@@ -918,7 +1124,7 @@
       "name": "WebSocket Examples",
       "item": [
         {
-          "name": "WebSocket Connection Info",
+          "name": "WebSocket Connection Guide",
           "request": {
             "method": "GET",
             "header": [],
@@ -927,7 +1133,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "health"]
             },
-            "description": "# WebSocket Chat\n\nPara conectar ao WebSocket:\n\n```bash\n# Instale wscat globalmente\nnpm install -g wscat\n\n# Conecte ao WebSocket\nwscat -c \"ws://localhost:3000/ws/chat?token=SEU_TOKEN_JWT_AQUI\"\n```\n\n## Mensagens disponíveis:\n\n### 1. Entrar em uma conversa\n```json\n{\n  \"type\": \"join\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\"\n  }\n}\n```\n\n### 2. Enviar mensagem\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"content\": \"Olá, preciso de ajuda!\"\n  }\n}\n```\n\n### 3. Continuar conversa existente\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"conversationId\": \"uuid-da-conversa\",\n    \"content\": \"Mais uma pergunta...\"\n  }\n}\n```\n\n### 4. Sair da conversa\n```json\n{\n  \"type\": \"leave\"\n}\n```\n\n### 5. Heartbeat (mantém conexão viva)\n```json\n{\n  \"type\": \"ping\"\n}\n```\n\nO servidor responderá automaticamente com `pong`.\n\n## Eventos recebidos do servidor:\n\n- `joined`: Confirmação de entrada na conversa\n- `message`: Nova mensagem (do usuário ou do agente)\n- `agent_response`: Resposta específica do agente\n- `error`: Erro ocorrido\n- `pong`: Resposta ao ping"
+            "description": "# 🔌 WebSocket Chat - Guia Completo\n\n## Conexão\n\n### Via wscat (Terminal)\n```bash\n# Instale wscat globalmente\nnpm install -g wscat\n\n# Conecte ao WebSocket\nwscat -c \"ws://localhost:3000/ws/chat?token=SEU_TOKEN_JWT_AQUI\"\n```\n\n### Via JavaScript (Browser)\n```javascript\nconst token = 'SEU_TOKEN_JWT';\nconst ws = new WebSocket(`ws://localhost:3000/ws/chat?token=${token}`);\n\nws.onopen = () => {\n  console.log('✅ Conectado');\n};\n\nws.onmessage = (event) => {\n  const data = JSON.parse(event.data);\n  console.log('📩 Recebido:', data);\n  \n  // Salvar socketId quando conectar\n  if (data.type === 'connected') {\n    console.log('🆔 SocketId:', data.data.socketId);\n    window.socketId = data.data.socketId;\n  }\n};\n\nws.onerror = (error) => {\n  console.error('❌ Erro:', error);\n};\n\nws.onclose = () => {\n  console.log('🔌 Desconectado');\n};\n```\n\n## Mensagens Enviadas (Cliente → Servidor)\n\n### 1. Join - Entrar em conversa\n```json\n{\n  \"type\": \"join\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"conversationId\": \"uuid-da-conversa\"\n  }\n}\n```\n\n### 2. Message - Enviar mensagem (nova conversa)\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"content\": \"Olá, preciso de ajuda!\"\n  }\n}\n```\n\n### 3. Message - Continuar conversa\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"agentId\": \"uuid-do-agente\",\n    \"conversationId\": \"uuid-da-conversa\",\n    \"content\": \"Mais uma pergunta...\"\n  }\n}\n```\n\n### 4. Typing - Indicador de digitação\n```json\n{\n  \"type\": \"typing\",\n  \"data\": {}\n}\n```\n\n## Eventos Recebidos (Servidor → Cliente)\n\n### 1. Connected - Confirmação de conexão\n```json\n{\n  \"type\": \"connected\",\n  \"data\": {\n    \"message\": \"Conectado ao chat\",\n    \"socketId\": \"abc-123-def-456\"\n  }\n}\n```\n**⚠️ IMPORTANTE:** Salve o `socketId` para usar em requisições POST!\n\n### 2. Joined - Confirmação de join\n```json\n{\n  \"type\": \"joined\",\n  \"data\": {\n    \"agentId\": \"uuid\",\n    \"conversationId\": \"uuid\"\n  }\n}\n```\n\n### 3. Queued - Mensagem enfileirada\n```json\n{\n  \"type\": \"queued\",\n  \"data\": {\n    \"message\": \"Mensagem recebida, processando...\"\n  }\n}\n```\n\n### 4. Processing - Mensagem sendo processada\n```json\n{\n  \"type\": \"processing\",\n  \"data\": {\n    \"conversationId\": \"uuid\",\n    \"messageId\": \"msg-uuid\",\n    \"jobId\": \"job-uuid\",\n    \"status\": \"processing\",\n    \"message\": \"Sua mensagem está sendo processada...\"\n  }\n}\n```\n\n### 5. Message - Resposta do agente\n```json\n{\n  \"type\": \"message\",\n  \"data\": {\n    \"messageId\": \"msg-uuid\",\n    \"conversationId\": \"conv-uuid\",\n    \"message\": \"Olá! Como posso ajudar?\",\n    \"timestamp\": \"2026-02-02T10:30:00.000Z\",\n    \"metadata\": {\n      \"model\": \"gpt-4\",\n      \"tokensUsed\": 234,\n      \"processingTime\": 3456,\n      \"finishReason\": \"stop\"\n    }\n  }\n}\n```\n\n### 6. Error - Erro\n```json\n{\n  \"type\": \"error\",\n  \"data\": {\n    \"error\": \"Mensagem de erro\"\n  }\n}\n```\n\n## Fluxos Comuns\n\n### Fluxo 1: Nova conversa via WebSocket\n```\n1. Cliente: connect\n2. Servidor: {type: \"connected\", data: {socketId: \"abc\"}}\n3. Cliente: {type: \"message\", data: {agentId, content}}\n4. Servidor: {type: \"queued\"}\n5. Servidor: {type: \"processing\", data: {conversationId, messageId}}\n6. Servidor: {type: \"message\", data: {message: \"resposta\"}}\n```\n\n### Fluxo 2: Híbrido (POST + WebSocket)\n```\n1. Cliente: connect via WebSocket\n2. Servidor: {type: \"connected\", data: {socketId: \"abc\"}}\n3. Cliente: join conversa {type: \"join\", data: {conversationId}}\n4. Cliente: POST /api/messages (mesmo conversationId)\n5. Servidor: Resposta chega via WebSocket ✅ (broadcast)\n```\n\n### Fluxo 3: Múltiplos dispositivos\n```\n1. Desktop: connect → join conversationId \"conv-123\"\n2. Mobile: connect → join conversationId \"conv-123\"\n3. Serviço externo: POST /api/messages (conversationId \"conv-123\")\n4. Ambos recebem via WebSocket! 📱💻\n```\n\n## Heartbeat\n\n```javascript\n// Cliente deve enviar ping a cada 30s\nsetInterval(() => {\n  ws.send(JSON.stringify({ type: 'ping' }));\n}, 30000);\n```\n\nServidor envia `pong` automaticamente.\n\n## Documentação Completa\n\nVer: `back/WEBSOCKET_GUIDE.md`"
           },
           "response": []
         }

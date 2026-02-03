@@ -3,6 +3,7 @@ import { authController } from '../controllers/auth.controller';
 import { agentController } from '../controllers/agent.controller';
 import { pluginController } from '../controllers/plugin.controller';
 import { chatController } from '../controllers/chat.controller';
+import { messageController } from '../controllers/message.controller';
 import { systemTokenController } from '../controllers/systemToken.controller';
 import { authMiddleware } from '../middleware/auth';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
@@ -38,10 +39,16 @@ router.get('/agents/:agentId/plugins', flexibleAuthMiddleware, pluginController.
 router.post('/agents/:agentId/plugins', authMiddleware, pluginController.install.bind(pluginController));
 router.delete('/agents/:agentId/plugins/:pluginId', authMiddleware, pluginController.uninstall.bind(pluginController));
 
-// Chat routes
+// Chat routes (legacy - mantido para compatibilidade)
 router.post('/chat/message', authMiddleware, chatController.sendMessage.bind(chatController));
 router.get('/chat/conversations/:id', flexibleAuthMiddleware, chatController.getConversation.bind(chatController));
 router.get('/agents/:agentId/conversations', flexibleAuthMiddleware, chatController.listConversations.bind(chatController));
+
+// Message routes (novo sistema de filas assíncrono)
+router.post('/messages', authMiddleware, messageController.sendMessage.bind(messageController));
+router.get('/messages/:messageId/status', authMiddleware, messageController.getMessageStatus.bind(messageController));
+router.get('/messages/queue/stats', authMiddleware, messageController.getQueueStats.bind(messageController));
+router.get('/messages/queue/health', authMiddleware, messageController.queueHealthCheck.bind(messageController));
 
 // System Token routes - admin only
 router.post('/system-tokens', authMiddleware, systemTokenController.create.bind(systemTokenController));
