@@ -178,7 +178,14 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       [userId]
     );
     
-    return result.rows;
+    return result.rows.map(row => ({
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
   }
   
   async getAgentById(agentId: string, userId: string): Promise<AgentWithPrompt | null> {
