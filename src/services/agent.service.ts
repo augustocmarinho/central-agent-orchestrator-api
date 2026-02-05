@@ -174,7 +174,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
   
   async getAgentsByUserId(userId: string): Promise<Agent[]> {
     const result = await query(
-      'SELECT * FROM agents WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT * FROM agents WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
       [userId]
     );
     
@@ -194,7 +194,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
               ap.restrictions, ap.knowledge_source, ap.final_prompt, ap.creation_mode
        FROM agents a
        LEFT JOIN agent_prompts ap ON a.id = ap.agent_id
-       WHERE a.id = $1 AND a.user_id = $2`,
+       WHERE a.id = $1 AND a.user_id = $2 AND a.deleted_at IS NULL`,
       [agentId, userId]
     );
     
@@ -234,7 +234,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
               ap.restrictions, ap.knowledge_source, ap.final_prompt, ap.creation_mode
        FROM agents a
        LEFT JOIN agent_prompts ap ON a.id = ap.agent_id
-       WHERE a.id = $1`,
+       WHERE a.id = $1 AND a.deleted_at IS NULL`,
       [agentId]
     );
     
@@ -289,7 +289,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
         
         await query(
           `UPDATE agents SET ${updates.join(', ')} 
-           WHERE id = $${paramCount++} AND user_id = $${paramCount++}`,
+           WHERE id = $${paramCount++} AND user_id = $${paramCount++} AND deleted_at IS NULL`,
           values
         );
       }
@@ -346,7 +346,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
   
   async deleteAgent(agentId: string, userId: string): Promise<boolean> {
     const result = await query(
-      'DELETE FROM agents WHERE id = $1 AND user_id = $2',
+      'UPDATE agents SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
       [agentId, userId]
     );
     
