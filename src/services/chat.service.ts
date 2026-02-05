@@ -5,8 +5,9 @@ import { agentService } from './agent.service';
 import { pluginService } from './plugin.service';
 import { n8nService } from './n8n.service';
 import { queueService } from './queue.service';
+import { conversationService } from './conversation.service';
 import { v4 as uuidv4 } from 'uuid';
-import { logInfo } from '../utils/logger';
+import { logInfo, logError } from '../utils/logger';
 
 export interface SendMessageData {
   agentId: string;
@@ -23,43 +24,146 @@ export class ChatService {
    * Envia mensagem usando sistema de filas (assíncrono)
    * Retorna imediatamente com status "queued"
    * 
-   * IMPORTANTE: Não usa MongoDB! O histórico fica 100% no Redis (gerenciado pelo N8N)
+   * Agora COM PERSISTÊNCIA no MongoDB!
    */
   async sendMessage(data: SendMessageData): Promise<any> {
     try {
-      // 1. Validar que agente existe (apenas validação, não precisa buscar dados)
+      // 1. Validar que agente existe
       const agent = await agentService.getAgentById(data.agentId, data.userId || '');
       if (!agent) {
         throw new Error('Agente não encontrado');
       }
 
       // 2. Gerar conversationId se não foi fornecido
-      // O conversationId é apenas um UUID, não precisa estar no MongoDB
       const conversationId = data.conversationId || uuidv4();
 
-      // 3. Enfileirar mensagem para processamento assíncrono (ou agendar)
+      // 3. Criar/buscar conversa no MongoDB
+      try {
+        await conversationService.createOrGetConversation({
+          conversationId,
+          agentId: data.agentId,
+          userId: data.userId,
+          source: this.buildSourceContact(data),
+          destination: this.buildDestinationContact(data.agentId, agent.name),
+          channel: (data.channel as any) || 'web',
+          channelMetadata: data.channelMetadata,
+        });
+      } catch (error: any) {
+        logError('Error creating/getting conversation, continuing...', error);
+        // Não falhar se der erro ao criar conversa, apenas logar
+      }
+
+      // 4. Salvar mensagem do usuário no MongoDB
+      const messageId = uuidv4();
+      try {
+        await conversationService.saveMessage({
+          messageId,
+          conversationId,
+          agentId: data.agentId,
+          userId: data.userId,
+          content: data.content,
+          type: 'user',
+          direction: 'inbound',
+          channel: (data.channel as any) || 'web',
+          channelMetadata: data.channelMetadata,
+          status: data.scheduledFor ? 'queued' : 'queued',
+          queuedAt: new Date(),
+        });
+      } catch (error: any) {
+        logError('Error saving user message, continuing...', error);
+        // Não falhar se der erro ao salvar mensagem, apenas logar
+      }
+
+      // 5. Enfileirar mensagem para processamento assíncrono
       const result = await queueService.enqueueMessage({
         conversationId,
         agentId: data.agentId,
         userId: data.userId || '',
         message: data.content,
         channel: (data.channel as any) || 'web',
-        channelMetadata: data.channelMetadata || {},
+        channelMetadata: {
+          ...data.channelMetadata,
+          userMessageId: messageId, // Passar messageId para o consumer
+        },
         scheduledFor: data.scheduledFor,
       });
 
-      // 4. Retornar imediatamente (202 Accepted)
+      // 6. Retornar imediatamente
       return {
         conversationId,
         messageId: result.messageId,
         jobId: result.jobId,
-        status: 'processing',
-        message: 'Mensagem recebida e em processamento',
+        status: result.status || 'processing',
+        scheduledFor: result.scheduledFor,
+        message: result.status === 'scheduled' 
+          ? `Mensagem agendada para ${result.scheduledFor?.toISOString()}`
+          : 'Mensagem recebida e em processamento',
       };
     } catch (error: any) {
-      console.error('Erro ao enfileirar mensagem:', error);
+      logError('Error enqueuing message', error);
       throw error;
     }
+  }
+
+  /**
+   * Constrói o contato de origem baseado nos dados da mensagem
+   */
+  private buildSourceContact(data: SendMessageData): any {
+    const channel = data.channel || 'web';
+    const metadata = data.channelMetadata || {};
+
+    switch (channel) {
+      case 'web':
+        return {
+          type: 'websocket',
+          socketId: metadata.websocketId || metadata.socketId,
+          name: data.userId ? `User ${data.userId}` : 'Anonymous',
+          metadata,
+        };
+      
+      case 'whatsapp':
+        return {
+          type: 'whatsapp',
+          phoneNumber: metadata.phoneNumber,
+          whatsappChatId: metadata.whatsappChatId,
+          name: metadata.name || metadata.phoneNumber,
+          metadata,
+        };
+      
+      case 'telegram':
+        return {
+          type: 'telegram',
+          telegramChatId: metadata.telegramChatId,
+          telegramUserId: metadata.telegramUserId,
+          telegramUsername: metadata.telegramUsername,
+          name: metadata.name || metadata.telegramUsername,
+          metadata,
+        };
+      
+      case 'api':
+      default:
+        return {
+          type: 'api',
+          apiClientId: metadata.apiClientId || data.userId,
+          callbackUrl: metadata.callbackUrl,
+          name: metadata.name || 'API Client',
+          metadata,
+        };
+    }
+  }
+
+  /**
+   * Constrói o contato de destino (agente)
+   */
+  private buildDestinationContact(agentId: string, agentName: string): any {
+    return {
+      type: 'system',
+      systemId: agentId,
+      name: agentName,
+      metadata: {
+        type: 'agent',
+      },
+    };
   }
 
   /**

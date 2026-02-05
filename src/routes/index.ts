@@ -4,6 +4,7 @@ import { agentController } from '../controllers/agent.controller';
 import { pluginController } from '../controllers/plugin.controller';
 import { chatController } from '../controllers/chat.controller';
 import { messageController } from '../controllers/message.controller';
+import { conversationController } from '../controllers/conversation.controller';
 import { systemTokenController } from '../controllers/systemToken.controller';
 import { authMiddleware } from '../middleware/auth';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
@@ -49,6 +50,16 @@ router.post('/messages', authMiddleware, messageController.sendMessage.bind(mess
 router.get('/messages/:messageId/status', authMiddleware, messageController.getMessageStatus.bind(messageController));
 router.get('/messages/queue/stats', authMiddleware, messageController.getQueueStats.bind(messageController));
 router.get('/messages/queue/health', authMiddleware, messageController.queueHealthCheck.bind(messageController));
+
+// Conversation routes (histórico de conversas e mensagens)
+router.get('/conversations/:conversationId', flexibleAuthMiddleware, conversationController.getConversation.bind(conversationController));
+router.get('/conversations/:conversationId/messages', flexibleAuthMiddleware, conversationController.getConversationMessages.bind(conversationController));
+router.get('/conversations/:conversationId/full', flexibleAuthMiddleware, conversationController.getConversationFull.bind(conversationController));
+router.patch('/conversations/:conversationId/status', authMiddleware, conversationController.updateConversationStatus.bind(conversationController));
+router.post('/conversations/find-by-source', flexibleAuthMiddleware, conversationController.findConversationBySource.bind(conversationController));
+router.get('/agents/:agentId/conversations', flexibleAuthMiddleware, conversationController.getAgentConversations.bind(conversationController));
+router.get('/agents/:agentId/conversations/stats', flexibleAuthMiddleware, conversationController.getAgentConversationStats.bind(conversationController));
+router.get('/users/:userId/conversations', authMiddleware, conversationController.getUserConversations.bind(conversationController));
 
 // System Token routes - admin only
 router.post('/system-tokens', authMiddleware, systemTokenController.create.bind(systemTokenController));

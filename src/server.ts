@@ -21,8 +21,8 @@ const startServer = async () => {
     logInfo('🚀 Iniciando servidor...');
     
     // Conectar ao MongoDB
-    // await connectMongoDB();
-    // logInfo('✅ MongoDB conectado com sucesso');
+    await connectMongoDB();
+    logInfo('✅ MongoDB conectado com sucesso');
     
     // Testar conexão PostgreSQL
     await pool.query('SELECT NOW()');

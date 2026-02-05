@@ -2,9 +2,11 @@ import Queue, { Job } from 'bull';
 import { redisConnection } from '../../config/redis.config';
 import { MessageJob, MessageProcessingResult } from '../../types/queue.types';
 import { agentService } from '../../services/agent.service';
+import { conversationService } from '../../services/conversation.service';
 import { logInfo, logError, logWarn } from '../../utils/logger';
 import { n8nService } from '../../services/n8n.service';
 import { responsePublisher } from '../pubsub';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Consumer de mensagens
@@ -52,6 +54,18 @@ export class MessageConsumer {
       channel 
     });
 
+    // Atualizar status da mensagem do usuário para "processing"
+    const userMessageId = job.data.channelMetadata?.userMessageId;
+    if (userMessageId) {
+      try {
+        await conversationService.updateMessageStatus(userMessageId, 'processing', {
+          processedAt: new Date()
+        });
+      } catch (error: any) {
+        logError('Error updating user message status', error);
+      }
+    }
+
     try {
       // 1. Buscar contexto do agente (10%)
       job.progress(10);
@@ -72,8 +86,7 @@ export class MessageConsumer {
         conversation_id: conversationId,
       };
 
-      // 4. Chamar workflow N8N (50% - etapa mais demorada)
-      // O N8N vai buscar o histórico do Redis automaticamente usando a chave chat:{conversationId}
+      // 3. Chamar workflow N8N (50% - etapa mais demorada)
       job.progress(50);
       logInfo('Calling N8N workflow (OpenAI Chat with Redis)', { conversationId });
       
@@ -89,18 +102,55 @@ export class MessageConsumer {
         tokensUsed: n8nResponse.tokens_used 
       });
 
+      const processingTime = Date.now() - startTime;
+
+      // 4. Salvar resposta do assistente no MongoDB (70%)
+      job.progress(70);
+      const assistantMessageId = uuidv4();
+      try {
+        await conversationService.saveMessage({
+          messageId: assistantMessageId,
+          conversationId,
+          agentId,
+          userId,
+          content: n8nResponse.message,
+          type: 'assistant',
+          direction: 'outbound',
+          channel,
+          channelMetadata: job.data.channelMetadata,
+          status: 'delivered',
+          processedAt: new Date(),
+          deliveredAt: new Date(),
+          processingTime,
+          tokensUsed: n8nResponse.tokens_used || 0,
+          model: n8nResponse.model || 'unknown',
+          finishReason: n8nResponse.finish_reason || 'stop',
+          replyToMessageId: userMessageId,
+          jobId: job.id?.toString(),
+        });
+
+        // Atualizar status da mensagem do usuário para "delivered"
+        if (userMessageId) {
+          await conversationService.updateMessageStatus(userMessageId, 'delivered', {
+            deliveredAt: new Date()
+          });
+        }
+      } catch (error: any) {
+        logError('Error saving assistant message', error);
+        // Não falhar o job por erro ao salvar no MongoDB
+      }
+
       // 5. Publicar resposta no PubSub (80%)
       job.progress(80);
-      await this.publishResponse(job.data, n8nResponse, Date.now() - startTime);
+      await this.publishResponse(job.data, n8nResponse, processingTime);
 
       // 6. Finalizado (100%)
       job.progress(100);
       
-      const processingTime = Date.now() - startTime;
-      
       logInfo('✅ Message processed successfully', { 
         jobId: job.id,
         messageId: id,
+        assistantMessageId,
         processingTime: `${processingTime}ms` 
       });
 
@@ -122,6 +172,20 @@ export class MessageConsumer {
         attempt: job.attemptsMade,
         maxAttempts: job.opts.attempts 
       });
+
+      // Marcar mensagem do usuário como failed
+      if (userMessageId) {
+        try {
+          await conversationService.updateMessageStatus(userMessageId, 'failed', {
+            error: {
+              message: error.message,
+              code: 'PROCESSING_ERROR',
+            }
+          });
+        } catch (err: any) {
+          logError('Error updating message status to failed', err);
+        }
+      }
 
       // Se é a última tentativa, publicar erro
       if (job.attemptsMade >= (job.opts.attempts || 3)) {

@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "migrate": "tsx src/db/migrate.ts",
+    "migrate:indexes": "tsx src/scripts/migrate-conversation-indexes.ts",
     "setup:n8n-token": "tsx src/scripts/setup-n8n-token.ts"
   },
   "keywords": [
