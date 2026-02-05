@@ -6,6 +6,7 @@ import { pluginService } from './plugin.service';
 import { n8nService } from './n8n.service';
 import { queueService } from './queue.service';
 import { conversationService } from './conversation.service';
+import { authService } from './auth.service';
 import { v4 as uuidv4 } from 'uuid';
 import { logInfo, logError } from '../utils/logger';
 
@@ -43,7 +44,7 @@ export class ChatService {
           conversationId,
           agentId: data.agentId,
           userId: data.userId,
-          source: this.buildSourceContact(data),
+          source: await this.buildSourceContact(data),
           destination: this.buildDestinationContact(data.agentId, agent.name),
           channel: (data.channel as any) || 'web',
           channelMetadata: data.channelMetadata,
@@ -108,16 +109,27 @@ export class ChatService {
   /**
    * Constrói o contato de origem baseado nos dados da mensagem
    */
-  private buildSourceContact(data: SendMessageData): any {
+  private async buildSourceContact(data: SendMessageData): Promise<any> {
     const channel = data.channel || 'web';
     const metadata = data.channelMetadata || {};
 
     switch (channel) {
       case 'web':
+        // Buscar nome real do usuário se tiver userId
+        let userName = 'Anonymous';
+        if (data.userId) {
+          try {
+            const user = await authService.getUserById(data.userId);
+            userName =  `Papo entre Agente e ${user?.name}`;
+          } catch (error) {
+            userName = `Anonymous`;
+          }
+        }
+        
         return {
           type: 'websocket',
           socketId: metadata.websocketId || metadata.socketId,
-          name: data.userId ? `User ${data.userId}` : 'Anonymous',
+          name: userName,
           metadata,
         };
       
