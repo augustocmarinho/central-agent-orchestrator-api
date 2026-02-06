@@ -69,54 +69,27 @@ export class WebHandler extends BaseDeliveryHandler {
       },
     };
 
-    let delivered = false;
+    let deliveredCount = 0;
+    const deliveredSockets = new Set<string>();
 
-    // Estratégia 1: Tentar entregar pelo socketId específico (se fornecido)
-    if (socketId) {
-      const ws = WebHandler.getConnection(socketId);
-      
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify(payload));
-          delivered = true;
-          
-          logInfo('✅ Message delivered via WebSocket (by socketId)', { 
-            socketId,
-            messageId: event.messageId,
-            conversationId 
-          });
-        } catch (error) {
-          logError('Error delivering message via WebSocket', error as Error, { 
-            socketId,
-            messageId: event.messageId 
-          });
-        }
-      } else {
-        logWarn('WebSocket connection not found or not open (by socketId)', { 
-          socketId,
-          messageId: event.messageId 
-        });
-      }
-    }
-
-    // Estratégia 2: Se não entregou pelo socketId, fazer broadcast por conversationId
-    if (!delivered && conversationId) {
-      let broadcastCount = 0;
-
+    // Estratégia: Broadcast para TODOS os WebSockets da conversa
+    if (conversationId) {
       WebHandler.getAllConnections().forEach((ws: any, sid) => {
         // Verificar se o WebSocket está nessa conversa E está aberto
         if (ws.conversationId === conversationId && ws.readyState === WebSocket.OPEN) {
           try {
             ws.send(JSON.stringify(payload));
-            broadcastCount++;
+            deliveredCount++;
+            deliveredSockets.add(sid);
             
-            logInfo('✅ Message delivered via WebSocket (by conversationId)', { 
+            logInfo('✅ Message delivered via WebSocket', { 
               socketId: sid,
               messageId: event.messageId,
-              conversationId 
+              conversationId,
+              isOriginalSender: sid === socketId
             });
           } catch (error) {
-            logError('Error broadcasting message via WebSocket', error as Error, { 
+            logError('Error delivering message via WebSocket', error as Error, { 
               socketId: sid,
               messageId: event.messageId 
             });
@@ -124,22 +97,24 @@ export class WebHandler extends BaseDeliveryHandler {
         }
       });
 
-      if (broadcastCount > 0) {
-        delivered = true;
-        logInfo(`📡 Message broadcasted to ${broadcastCount} WebSocket(s)`, { 
+      if (deliveredCount > 0) {
+        logInfo(`📡 Message broadcasted to ${deliveredCount} WebSocket(s)`, { 
           messageId: event.messageId,
-          conversationId 
+          conversationId,
+          sockets: Array.from(deliveredSockets)
         });
       }
     }
 
     // Se não conseguiu entregar de forma alguma, logar aviso
-    if (!delivered) {
+    if (deliveredCount === 0) {
       logWarn('❌ No WebSocket available for delivery', { 
         socketId,
         conversationId,
         messageId: event.messageId,
-        reason: 'No matching WebSocket connection found (by socketId or conversationId)'
+        reason: conversationId 
+          ? 'No WebSocket connections found for this conversation'
+          : 'No conversationId provided'
       });
     }
   }

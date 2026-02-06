@@ -193,6 +193,19 @@ export class ChatWebSocketServer {
         });
       }
       
+      // Fazer broadcast da mensagem do usuário para todos os WebSockets da conversa
+      this.broadcastToConversation(result.conversationId, {
+        type: 'user_message',
+        data: {
+          messageId: result.messageId,
+          conversationId: result.conversationId,
+          content: data.content,
+          userId: ws.userId,
+          timestamp: new Date().toISOString(),
+          senderSocketId: ws.socketId, // Identificar quem enviou
+        },
+      });
+      
       // Confirmar que mensagem foi enfileirada ou agendada
       this.sendMessage(ws, {
         type: result.status === 'scheduled' ? 'scheduled' : 'processing',
@@ -212,6 +225,26 @@ export class ChatWebSocketServer {
     } catch (error: any) {
       console.error('Erro ao processar mensagem do chat:', error);
       this.sendError(ws, error.message || 'Erro ao processar mensagem');
+    }
+  }
+  
+  private broadcastToConversation(conversationId: string, data: any) {
+    let broadcastCount = 0;
+    
+    this.wss.clients.forEach((client: WebSocketClient) => {
+      // Enviar para todos os clientes conectados nessa conversa
+      if (client.conversationId === conversationId && client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify(data));
+          broadcastCount++;
+        } catch (error) {
+          console.error('Erro ao fazer broadcast para conversa:', error);
+        }
+      }
+    });
+    
+    if (broadcastCount > 0) {
+      console.log(`📡 Broadcast para ${broadcastCount} cliente(s) na conversa ${conversationId}`);
     }
   }
   
