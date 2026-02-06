@@ -73,36 +73,85 @@ export class ResponseSubscriber {
   }
 
   /**
-   * Roteia a resposta para o handler correto baseado no canal
+   * Roteia a resposta para múltiplos handlers (multi-canal)
+   * SEMPRE entrega via WebSocket (para dashboard/frontend) + canal de origem
    */
   private async routeResponse(event: ResponseEvent) {
     try {
-      logInfo('🔀 Routing response', { 
+      logInfo('🔀 Routing response (multi-channel)', { 
         messageId: event.messageId, 
-        channel: event.channel 
+        channel: event.channel,
+        conversationId: event.conversationId
       });
 
+      const deliveries: Array<{
+        handler: string;
+        promise: Promise<void>;
+      }> = [];
+
+      // 1. SEMPRE fazer broadcast via WebSocket (para dashboard/frontend)
+      // Isso garante que qualquer pessoa conectada na conversa veja a mensagem
+      deliveries.push({
+        handler: 'WebSocket',
+        promise: webHandler.deliver(event)
+      });
+
+      // 2. Entregar no canal de origem (WhatsApp, Telegram, etc)
       switch (event.channel) {
-        case 'web':
-          await webHandler.deliver(event);
-          break;
-        
         case 'whatsapp':
-          await whatsappHandler.deliver(event);
+          deliveries.push({
+            handler: 'WhatsApp',
+            promise: whatsappHandler.deliver(event)
+          });
           break;
         
         case 'telegram':
-          await telegramHandler.deliver(event);
+          deliveries.push({
+            handler: 'Telegram',
+            promise: telegramHandler.deliver(event)
+          });
           break;
         
         case 'api':
-          // Handler para callbacks API (futuro)
+          // TODO: Handler para callbacks API
           logWarn('API channel not implemented yet', { messageId: event.messageId });
+          break;
+        
+        case 'web':
+          // Já coberto pelo WebSocket acima
           break;
         
         default:
           logWarn('Unknown channel', { channel: event.channel, messageId: event.messageId });
       }
+
+      // 3. Executar todas as entregas em paralelo
+      const results = await Promise.allSettled(
+        deliveries.map(d => d.promise)
+      );
+
+      // 4. Logar resultados
+      results.forEach((result, index) => {
+        const handler = deliveries[index].handler;
+        if (result.status === 'fulfilled') {
+          logInfo(`✅ Delivery successful: ${handler}`, { 
+            messageId: event.messageId,
+            handler 
+          });
+        } else {
+          logError(`❌ Delivery failed: ${handler}`, result.reason, { 
+            messageId: event.messageId,
+            handler 
+          });
+        }
+      });
+
+      logInfo('📤 Response published to conversation', {
+        messageId: event.messageId,
+        conversationId: event.conversationId,
+        totalDeliveries: deliveries.length,
+        successCount: results.filter(r => r.status === 'fulfilled').length
+      });
 
     } catch (error) {
       logError('Error routing response', error as Error, { 

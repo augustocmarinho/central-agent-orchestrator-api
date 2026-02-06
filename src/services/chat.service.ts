@@ -304,7 +304,7 @@ export class ChatService {
   }
   
   async getConversation(conversationId: string): Promise<any> {
-    const conversation = await Conversation.findById(conversationId);
+    const conversation = await Conversation.findOne({ conversationId });
     if (!conversation) {
       throw new Error('Conversação não encontrada');
     }

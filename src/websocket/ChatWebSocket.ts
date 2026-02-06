@@ -160,6 +160,43 @@ export class ChatWebSocketServer {
         }
       }
       
+      // Buscar conversação para determinar o canal correto
+      const conversationId = ws.conversationId || data.conversationId;
+      let channel: 'web' | 'whatsapp' | 'telegram' | 'api' = 'web';
+      let channelMetadata: Record<string, any> = {
+        websocketId: ws.socketId,
+      };
+
+      if (conversationId) {
+        const conversation = await chatService.getConversation(conversationId);
+        if (conversation) {
+          // Usar o canal da conversa original
+          channel = conversation.channel;
+          
+          // Mesclar metadados do canal original com o socketId atual
+          channelMetadata = {
+            ...conversation.channelMetadata,
+            websocketId: ws.socketId, // Sempre incluir para delivery via WebSocket
+          };
+
+          // Adicionar informações específicas do canal de origem
+          if (channel === 'whatsapp' && conversation.source.phoneNumber) {
+            channelMetadata.phoneNumber = conversation.source.phoneNumber;
+            channelMetadata.whatsappChatId = conversation.source.whatsappChatId;
+          } else if (channel === 'telegram' && conversation.source.telegramChatId) {
+            channelMetadata.telegramChatId = conversation.source.telegramChatId;
+            channelMetadata.telegramUserId = conversation.source.telegramUserId;
+          }
+
+          console.log('📋 Conversa encontrada - usando canal:', {
+            conversationId,
+            channel,
+            hasPhoneNumber: !!channelMetadata.phoneNumber,
+            hasTelegramChatId: !!channelMetadata.telegramChatId
+          });
+        }
+      }
+      
       // Notificar que está enfileirando ou agendando
       this.sendMessage(ws, {
         type: scheduledDate ? 'scheduled' : 'queued',
@@ -176,12 +213,10 @@ export class ChatWebSocketServer {
         agentId: data.agentId,
         userId: ws.userId,
         content: data.content,
-        conversationId: ws.conversationId || data.conversationId,
-        channel: 'web',
-        channelMetadata: {
-          websocketId: ws.socketId, // Importante: passa o socketId para delivery
-        },
-        scheduledFor: scheduledDate, // Passa o scheduledFor!
+        conversationId,
+        channel,
+        channelMetadata,
+        scheduledFor: scheduledDate,
       });
       
       // Atualizar conversationId se for nova
