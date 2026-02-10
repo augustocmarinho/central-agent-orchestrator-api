@@ -100,6 +100,31 @@ export class ConversationService {
   }
 
   /**
+   * Atualiza o nome do contato (source) de uma conversa.
+   * Útil para WhatsApp/Baileys quando recebemos pushName em mensagens inbound.
+   */
+  async updateSourceContactName(
+    conversationId: string,
+    updates: { name?: string }
+  ): Promise<IConversation | null> {
+    try {
+      if (!updates.name?.trim()) return null;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { $set: { 'source.name': updates.name.trim() } },
+        { new: true }
+      );
+      if (conversation) {
+        logInfo('Conversation source name updated', { conversationId, name: updates.name });
+      }
+      return conversation;
+    } catch (error: any) {
+      logError('Error updating conversation source name', error);
+      return null;
+    }
+  }
+
+  /**
    * Busca conversa por número de telefone WhatsApp e agente
    * Útil para canais externos que identificam usuários por número
    */

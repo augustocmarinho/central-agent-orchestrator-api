@@ -234,6 +234,8 @@ class WhatsAppSessionManager {
         if (!messageText.trim()) continue;
 
         const phoneNumber = from.split('@')[0];
+        // Nome do contato (display name) vindo do Baileys - message.pushName
+        const pushName = typeof (message as any).pushName === 'string' ? (message as any).pushName.trim() : undefined;
 
         // Mensagem enviada PELO app no celular conectado (fromMe) → salvar como outbound e exibir no chat
         if (message.key.fromMe) {
@@ -246,6 +248,7 @@ class WhatsAppSessionManager {
           agentId,
           sessionId,
           from,
+          pushName: pushName || undefined,
           messageLength: messageText.length
         });
 
@@ -268,8 +271,14 @@ class WhatsAppSessionManager {
               phoneNumber,
               whatsappChatId: from,
               platform: 'baileys',
+              name: pushName,
             }
           });
+
+          // Atualizar nome do contato na conversa existente quando temos pushName
+          if (existingConversation?.conversationId && pushName) {
+            await conversationService.updateSourceContactName(existingConversation.conversationId, { name: pushName });
+          }
           
           logInfo('✅ WhatsApp message processed and queued', { agentId, from });
         } catch (integrationError) {
