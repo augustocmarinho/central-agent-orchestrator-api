@@ -1,8 +1,10 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { IncomingMessage } from 'http';
 import { chatService } from '../services/chat.service';
+import { conversationService } from '../services/conversation.service';
 import { verifyToken } from '../auth/jwt';
 import { WebHandler } from '../queues/handlers/web.handler';
+import { responsePublisher } from '../queues/pubsub/publisher';
 import url from 'url';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -166,28 +168,23 @@ export class ChatWebSocketServer {
       let channelMetadata: Record<string, any> = {
         websocketId: ws.socketId,
       };
+      let conv: any = null;
 
       if (conversationId) {
-        const conversation = await chatService.getConversation(conversationId);
-        if (conversation) {
-          // Usar o canal da conversa original
-          channel = conversation.channel;
-          
-          // Mesclar metadados do canal original com o socketId atual
+        conv = await conversationService.getConversation(conversationId);
+        if (conv) {
+          channel = conv.channel;
           channelMetadata = {
-            ...conversation.channelMetadata,
-            websocketId: ws.socketId, // Sempre incluir para delivery via WebSocket
+            ...(conv.channelMetadata || {}),
+            websocketId: ws.socketId,
           };
-
-          // Adicionar informações específicas do canal de origem
-          if (channel === 'whatsapp' && conversation.source.phoneNumber) {
-            channelMetadata.phoneNumber = conversation.source.phoneNumber;
-            channelMetadata.whatsappChatId = conversation.source.whatsappChatId;
-          } else if (channel === 'telegram' && conversation.source.telegramChatId) {
-            channelMetadata.telegramChatId = conversation.source.telegramChatId;
-            channelMetadata.telegramUserId = conversation.source.telegramUserId;
+          if (channel === 'whatsapp' && conv.source?.phoneNumber) {
+            channelMetadata.phoneNumber = conv.source.phoneNumber;
+            channelMetadata.whatsappChatId = conv.source.whatsappChatId;
+          } else if (channel === 'telegram' && conv.source?.telegramChatId) {
+            channelMetadata.telegramChatId = conv.source.telegramChatId;
+            channelMetadata.telegramUserId = conv.source.telegramUserId;
           }
-
           console.log('📋 Conversa encontrada - usando canal:', {
             conversationId,
             channel,
@@ -196,8 +193,57 @@ export class ChatWebSocketServer {
           });
         }
       }
+
+      // Se é conversa WhatsApp e o operador está enviando pelo chat web: entregar ao WhatsApp, não à IA
+      if (channel === 'whatsapp' && conv && conversationId) {
+        const messageId = uuidv4();
+        try {
+          await conversationService.saveMessage({
+            messageId,
+            conversationId,
+            agentId: data.agentId,
+            userId: ws.userId,
+            content: data.content,
+            type: 'assistant',
+            direction: 'outbound',
+            channel: 'whatsapp',
+            channelMetadata: { ...channelMetadata },
+            status: 'delivered',
+            processedAt: new Date(),
+            deliveredAt: new Date(),
+          });
+          await responsePublisher.publishResponse({
+            messageId,
+            conversationId,
+            agentId: data.agentId,
+            response: {
+              message: data.content,
+              tokensUsed: 0,
+              model: 'operator',
+              finishReason: 'stop',
+            },
+            channel: 'whatsapp',
+            channelMetadata: { ...channelMetadata },
+            timestamp: new Date().toISOString(),
+            processingTime: 0,
+          });
+          this.sendMessage(ws, {
+            type: 'delivered',
+            data: {
+              conversationId,
+              messageId,
+              status: 'delivered',
+              message: 'Mensagem enviada ao WhatsApp.',
+            },
+          });
+        } catch (err: any) {
+          console.error('Erro ao enviar mensagem para WhatsApp', err);
+          this.sendError(ws, err.message || 'Erro ao enviar para WhatsApp');
+        }
+        return;
+      }
       
-      // Notificar que está enfileirando ou agendando
+      // Fluxo normal: mensagem vai para a IA (canal web ou agendamento)
       this.sendMessage(ws, {
         type: scheduledDate ? 'scheduled' : 'queued',
         data: { 
@@ -208,7 +254,6 @@ export class ChatWebSocketServer {
         },
       });
       
-      // Enviar para fila (retorna imediatamente ou agenda)
       const result = await chatService.sendMessage({
         agentId: data.agentId,
         userId: ws.userId,
@@ -219,7 +264,6 @@ export class ChatWebSocketServer {
         scheduledFor: scheduledDate,
       });
       
-      // Atualizar conversationId se for nova
       if (!ws.conversationId) {
         ws.conversationId = result.conversationId;
         console.log('📍 WebSocket conversationId updated', { 
@@ -228,7 +272,6 @@ export class ChatWebSocketServer {
         });
       }
       
-      // Fazer broadcast da mensagem do usuário para todos os WebSockets da conversa
       this.broadcastToConversation(result.conversationId, {
         type: 'user_message',
         data: {
@@ -237,11 +280,10 @@ export class ChatWebSocketServer {
           content: data.content,
           userId: ws.userId,
           timestamp: new Date().toISOString(),
-          senderSocketId: ws.socketId, // Identificar quem enviou
+          senderSocketId: ws.socketId,
         },
       });
       
-      // Confirmar que mensagem foi enfileirada ou agendada
       this.sendMessage(ws, {
         type: result.status === 'scheduled' ? 'scheduled' : 'processing',
         data: {
@@ -255,8 +297,6 @@ export class ChatWebSocketServer {
             : 'Sua mensagem está sendo processada...',
         },
       });
-
-      // A resposta será enviada automaticamente pelo WebHandler quando o job completar
     } catch (error: any) {
       console.error('Erro ao processar mensagem do chat:', error);
       this.sendError(ws, error.message || 'Erro ao processar mensagem');
