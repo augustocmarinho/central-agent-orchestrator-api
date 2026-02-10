@@ -80,25 +80,26 @@ export class ChatService {
       }
 
       // 4.1. Notificar clientes WebSocket sobre a nova mensagem do usuário
-      // Isso garante que mensagens vindas de canais externos (ex: WhatsApp)
-      // apareçam em tempo real no dashboard, sem precisar recarregar a página.
-      try {
-        const { WebHandler } = await import('../queues/handlers/web.handler');
+      // Apenas para canais externos (WhatsApp, Telegram, etc.). No canal web o
+      // ChatWebSocket já faz broadcast com senderSocketId, evitando duplicata no front.
+      if (data.channel && data.channel !== 'web') {
+        try {
+          const { WebHandler } = await import('../queues/handlers/web.handler');
 
-        WebHandler.broadcast({
-          type: 'user_message',
-          data: {
-            messageId,
-            conversationId,
-            content: data.content,
-            userId: data.userId,
-            timestamp: new Date().toISOString(),
-            // Para canais externos não há socket específico de origem
-            senderSocketId: undefined,
-          },
-        });
-      } catch (error: any) {
-        logError('Error broadcasting user message to WebSocket', error);
+          WebHandler.broadcast({
+            type: 'user_message',
+            data: {
+              messageId,
+              conversationId,
+              content: data.content,
+              userId: data.userId,
+              timestamp: new Date().toISOString(),
+              senderSocketId: undefined,
+            },
+          });
+        } catch (error: any) {
+          logError('Error broadcasting user message to WebSocket', error);
+        }
       }
 
       // 5. Enfileirar mensagem para processamento assíncrono
