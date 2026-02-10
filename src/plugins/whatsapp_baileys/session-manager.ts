@@ -198,7 +198,24 @@ class WhatsAppSessionManager {
   }
 
   /**
-   * Processa mensagens recebidas
+   * Extrai texto de uma mensagem Baileys (proto.IMessage)
+   * Cobre: conversation, extendedTextMessage, caption de mídia
+   */
+  private extractMessageText(msg: any): string {
+    if (!msg?.message) return '';
+    const m = msg.message;
+    if (typeof m?.conversation === 'string') return m.conversation;
+    if (typeof m?.extendedTextMessage?.text === 'string') return m.extendedTextMessage.text;
+    if (typeof m?.imageMessage?.caption === 'string') return m.imageMessage.caption;
+    if (typeof m?.videoMessage?.caption === 'string') return m.videoMessage.caption;
+    if (typeof m?.documentMessage?.caption === 'string') return m.documentMessage.caption;
+    if (typeof m?.buttonsResponseMessage?.selectedButtonId === 'string') return m.buttonsResponseMessage.selectedButtonId;
+    if (typeof m?.listResponseMessage?.title === 'string') return m.listResponseMessage.title;
+    return '';
+  }
+
+  /**
+   * Processa mensagens recebidas (inbound = do contato) e enviadas pelo app (fromMe = do número conectado)
    */
   private async handleIncomingMessages(
     agentId: string,
@@ -210,33 +227,32 @@ class WhatsAppSessionManager {
     if (type !== 'notify') return;
 
     for (const message of messages) {
-      // Ignorar mensagens próprias
-      if (message.key.fromMe) continue;
-
       try {
         const from = message.key?.remoteJid || '';
-        const messageText = message.message?.conversation || 
-                           message.message?.extendedTextMessage?.text || 
-                           '';
+        const messageText = this.extractMessageText(message);
 
-        if (!messageText) continue;
+        if (!messageText.trim()) continue;
 
-        logInfo('📱 Received WhatsApp message', {
+        const phoneNumber = from.split('@')[0];
+
+        // Mensagem enviada PELO app no celular conectado (fromMe) → salvar como outbound e exibir no chat
+        if (message.key.fromMe) {
+          await this.handleMessageSentFromPhone(agentId, sessionId, from, phoneNumber, messageText);
+          continue;
+        }
+
+        // Mensagem recebida DO contato (inbound) → enfileirar para IA e broadcast user_message
+        logInfo('📱 Received WhatsApp message (inbound)', {
           agentId,
           sessionId,
           from,
           messageLength: messageText.length
         });
 
-        // Integrar com o sistema de mensagens
         try {
-          // Importar dinamicamente para evitar dependência circular
           const { chatService } = await import('../../services/chat.service');
           const { conversationService } = await import('../../services/conversation.service');
           
-          const phoneNumber = from.split('@')[0];
-          
-          // Buscar conversa existente por telefone
           const existingConversation = await conversationService.findConversationByPhoneAndAgent(
             phoneNumber,
             agentId,
@@ -246,7 +262,7 @@ class WhatsAppSessionManager {
           await chatService.sendMessage({
             agentId,
             content: messageText,
-            conversationId: existingConversation?.conversationId, // Reutilizar conversa existente
+            conversationId: existingConversation?.conversationId,
             channel: 'whatsapp',
             channelMetadata: {
               phoneNumber,
@@ -263,6 +279,101 @@ class WhatsAppSessionManager {
       } catch (error) {
         logError('Error processing incoming message', error as Error, { agentId, sessionId });
       }
+    }
+  }
+
+  /**
+   * Processa mensagem enviada pelo app no celular conectado (fromMe).
+   * Salva como assistant/outbound e publica para o front exibir no chat.
+   */
+  private async handleMessageSentFromPhone(
+    agentId: string,
+    sessionId: string,
+    remoteJid: string,
+    phoneNumber: string,
+    messageText: string
+  ): Promise<void> {
+    try {
+      const { conversationService } = await import('../../services/conversation.service');
+      const { responsePublisher } = await import('../../queues/pubsub/publisher');
+      const { v4: uuidv4 } = await import('uuid');
+
+      let conv = await conversationService.findConversationByPhoneAndAgent(
+        phoneNumber,
+        agentId,
+        'whatsapp'
+      );
+
+      if (!conv) {
+        const { agentService } = await import('../../services/agent.service');
+        const agent = await agentService.getAgentByIdForSystem(agentId);
+        const conversationId = uuidv4();
+        conv = await conversationService.createOrGetConversation({
+          conversationId,
+          agentId,
+          source: {
+            type: 'whatsapp',
+            phoneNumber,
+            whatsappChatId: remoteJid,
+            name: phoneNumber,
+            metadata: {},
+          },
+          destination: {
+            type: 'system',
+            systemId: agentId,
+            name: agent?.name || 'Agente',
+            metadata: { type: 'agent' },
+          },
+          channel: 'whatsapp',
+          channelMetadata: { phoneNumber, whatsappChatId: remoteJid, platform: 'baileys' },
+        });
+      }
+
+      const conversationId = conv.conversationId;
+      const messageId = uuidv4();
+
+      await conversationService.saveMessage({
+        messageId,
+        conversationId,
+        agentId,
+        content: messageText,
+        type: 'assistant',
+        direction: 'outbound',
+        channel: 'whatsapp',
+        channelMetadata: { phoneNumber, whatsappChatId: remoteJid, platform: 'baileys' },
+        status: 'delivered',
+        processedAt: new Date(),
+        deliveredAt: new Date(),
+      });
+
+      // Entregar apenas ao front (WebSocket). NÃO publicar no Redis:
+      // publishResponse faria o WhatsAppHandler reenviar a mensagem ao destinatário (duplicata).
+      const { webHandler } = await import('../../queues/handlers/web.handler');
+      await webHandler.deliver({
+        messageId,
+        conversationId,
+        agentId,
+        response: {
+          message: messageText,
+          tokensUsed: 0,
+          model: 'whatsapp_app',
+          finishReason: 'stop',
+        },
+        channel: 'whatsapp',
+        channelMetadata: { phoneNumber, whatsappChatId: remoteJid, platform: 'baileys' },
+        timestamp: new Date().toISOString(),
+        processingTime: 0,
+      });
+
+      logInfo('📱 Message sent from phone synced to chat', {
+        agentId,
+        sessionId,
+        phoneNumber,
+        conversationId,
+        messageLength: messageText.length,
+      });
+    } catch (error) {
+      logError('Failed to sync message sent from phone', error as Error, { agentId, sessionId, phoneNumber });
     }
   }
 
