@@ -96,6 +96,33 @@ export class ChatController {
       });
     }
   }
+
+  /**
+   * Cria uma nova conversa web para o agente (usado por "Teste o agente").
+   * POST /api/agents/:agentId/conversations
+   */
+  async createConversation(req: AuthRequest, res: Response) {
+    try {
+      const { agentId } = req.params;
+      const userId = req.user!.userId;
+      const conversation = await chatService.startWebConversation(agentId, userId);
+      logInfo('Conversation created for agent', { userId, agentId, conversationId: conversation.conversationId });
+      res.status(201).json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error: any) {
+      logError('Failed to create conversation', error, {
+        userId: req.user?.userId,
+        agentId: req.params.agentId,
+      });
+      const status = error.message === 'Agente não encontrado' ? 404 : 500;
+      res.status(status).json({
+        success: false,
+        error: error.message || 'Erro ao criar conversa',
+      });
+    }
+  }
 }
 
 export const chatController = new ChatController();

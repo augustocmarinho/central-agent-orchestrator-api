@@ -45,6 +45,7 @@ router.delete('/agents/:agentId/plugins/:pluginId', authMiddleware, pluginContro
 router.post('/chat/message', authMiddleware, chatController.sendMessage.bind(chatController));
 router.get('/chat/conversations/:id', flexibleAuthMiddleware, chatController.getConversation.bind(chatController));
 router.get('/agents/:agentId/conversations', flexibleAuthMiddleware, chatController.listConversations.bind(chatController));
+router.post('/agents/:agentId/conversations', authMiddleware, chatController.createConversation.bind(chatController));
 
 // Message routes (novo sistema de filas assíncrono)
 router.post('/messages', authMiddleware, messageController.sendMessage.bind(messageController));

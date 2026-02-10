@@ -134,6 +134,35 @@ export class ChatService {
   }
 
   /**
+   * Cria uma nova conversa web (para "Teste o agente") sem enviar mensagem.
+   * Retorna a conversa criada para o front usar o conversationId na primeira mensagem.
+   */
+  async startWebConversation(agentId: string, userId: string): Promise<any> {
+    const agent = await agentService.getAgentById(agentId, userId);
+    if (!agent) {
+      throw new Error('Agente não encontrado');
+    }
+    const conversationId = uuidv4();
+    const source = await this.buildSourceContact({
+      agentId,
+      userId,
+      content: '',
+      channel: 'web',
+    } as SendMessageData);
+    const destination = this.buildDestinationContact(agentId, agent.name);
+    const conversation = await conversationService.createOrGetConversation({
+      conversationId,
+      agentId,
+      userId,
+      source,
+      destination,
+      channel: 'web',
+    });
+    logInfo('Web conversation started', { conversationId, agentId, userId });
+    return conversation;
+  }
+
+  /**
    * Constrói o contato de origem baseado nos dados da mensagem
    */
   private async buildSourceContact(data: SendMessageData): Promise<any> {
