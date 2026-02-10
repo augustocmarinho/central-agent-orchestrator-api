@@ -75,7 +75,40 @@ export class MessageConsumer {
         throw new Error(`Agent ${agentId} not found`);
       }
 
-      logInfo('Agent loaded', { agentId, agentName: agent.name });
+      logInfo('Agent loaded', { agentId, agentName: agent.name, status: agent.status });
+
+      // 1.1. Se o agente estiver pausado/draft, não gerar resposta
+      if (agent.status !== 'active') {
+        logInfo('Agent is not active, skipping response generation', { 
+          agentId, 
+          status: agent.status,
+          channel,
+        });
+
+        // Marcar mensagem do usuário como "delivered" para indicar que foi processada,
+        // mas sem resposta automática.
+        if (userMessageId) {
+          try {
+            await conversationService.updateMessageStatus(userMessageId, 'delivered', {
+              processedAt: new Date(),
+              deliveredAt: new Date(),
+            });
+          } catch (error: any) {
+            logError('Error updating user message status for inactive agent', error);
+          }
+        }
+
+        const processingTime = Date.now() - startTime;
+
+        // Finalizar o job com sucesso, mas sem resposta
+        return {
+          success: true,
+          messageId: id,
+          conversationId,
+          response: null,
+          processingTime,
+        };
+      }
 
       // 2. Preparar payload para N8N (30%)
       // O N8N vai buscar o histórico automaticamente do Redis (chave: chat:{conversationId})

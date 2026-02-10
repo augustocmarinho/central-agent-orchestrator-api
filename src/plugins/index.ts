@@ -2,6 +2,7 @@
 import { pluginService } from '../services/plugin.service';
 import calendarFakeManifest from './calendar_fake/manifest.json';
 import echoManifest from './echo/manifest.json';
+import whatsappBaileysManifest from './whatsapp_baileys/manifest.json';
 
 export const defaultPlugins = [
   {
@@ -11,6 +12,10 @@ export const defaultPlugins = [
   {
     ...echoManifest,
     manifest: echoManifest,
+  },
+  {
+    ...whatsappBaileysManifest,
+    manifest: whatsappBaileysManifest,
   },
 ];
 
@@ -42,3 +47,4 @@ export const registerDefaultPlugins = async () => {
 // Exportar handlers dos plugins
 export { default as calendarFakePlugin } from './calendar_fake/handler';
 export { default as echoPlugin } from './echo/handler';
+export { default as whatsappBaileysPlugin } from './whatsapp_baileys/handler';

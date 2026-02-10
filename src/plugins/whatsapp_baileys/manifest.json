@@ -1,0 +1,41 @@
+{
+  "id": "plugin.whatsapp_baileys",
+  "name": "WhatsApp - Baileys (Não Oficial)",
+  "category": "comunicacao",
+  "description": "Conecte seu agente ao WhatsApp usando Baileys (API não oficial). Ideal para desenvolvimento e testes. Para produção, recomendamos usar o plugin WhatsApp Business API (oficial).",
+  "version": "1.0.0",
+  "auth_type": "qrcode",
+  "supports_sandbox": false,
+  "requires_setup": true,
+  "config_schema": [
+    {
+      "key": "session_id",
+      "type": "string",
+      "required": true,
+      "description": "ID único da sessão WhatsApp",
+      "auto_generate": true
+    },
+    {
+      "key": "status",
+      "type": "string",
+      "required": false,
+      "description": "Status da conexão (disconnected, connecting, connected)",
+      "default": "disconnected"
+    }
+  ],
+  "depends_on": [],
+  "capabilities": [
+    "send_message",
+    "receive_message",
+    "send_media",
+    "receive_media",
+    "typing_indicator",
+    "read_receipts"
+  ],
+  "warnings": [
+    "Esta é uma implementação não oficial do WhatsApp",
+    "Uso excessivo pode resultar em banimento da sua conta",
+    "Recomendado apenas para desenvolvimento e testes",
+    "Para produção, utilize a API oficial do WhatsApp Business"
+  ]
+}

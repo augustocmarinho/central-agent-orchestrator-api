@@ -1,6 +1,7 @@
 import { ResponseEvent } from '../../types/queue.types';
 import { BaseDeliveryHandler } from './delivery.handler';
 import { logInfo, logWarn, logError } from '../../utils/logger';
+import { query } from '../../db/postgres';
 
 /**
  * Handler para entrega via WhatsApp
@@ -42,31 +43,43 @@ export class WhatsAppHandler extends BaseDeliveryHandler {
     });
 
     try {
-      // TODO: Escolher e implementar uma das opções abaixo:
-      
-      // OPÇÃO 1: Twilio WhatsApp API
-      // await this.deliverViaTwilio(event, phoneNumber);
-      
-      // OPÇÃO 2: WhatsApp Business Cloud API (Meta)
-      // await this.deliverViaWhatsAppBusinessAPI(event, phoneNumber);
-      
-      // OPÇÃO 3: Evolution API (solução brasileira popular)
-      // await this.deliverViaEvolutionAPI(event, phoneNumber, whatsappChatId);
-      
-      // OPÇÃO 4: Baileys/WPPConnect (self-hosted)
-      // await this.deliverViaSelfHosted(event, phoneNumber);
+      // Verificar se o plugin Baileys está instalado e obter session_id
+      const pluginResult = await query(
+        `SELECT ap.id 
+         FROM agent_plugins ap 
+         WHERE ap.agent_id = $1 AND ap.plugin_id = 'plugin.whatsapp_baileys' AND ap.is_active = true`,
+        [event.agentId]
+      );
 
-      logWarn('⚠️ WhatsApp delivery not implemented yet - message queued', { 
-        messageId: event.messageId,
-        phoneNumber: phoneNumber ? `***${phoneNumber.slice(-4)}` : undefined
-      });
+      if (pluginResult.rows.length === 0) {
+        logWarn('WhatsApp Baileys plugin not installed for agent', { 
+          agentId: event.agentId,
+          messageId: event.messageId 
+        });
+        return;
+      }
 
-      // Temporariamente: apenas logar que a mensagem seria enviada
-      logInfo('💬 WhatsApp message content (would be sent):', {
-        to: phoneNumber,
-        message: event.response.message.substring(0, 100) + '...',
-        conversationId: event.conversationId
-      });
+      // Obter session_id
+      const configResult = await query(
+        `SELECT pc.config_value 
+         FROM plugin_configs pc
+         JOIN agent_plugins ap ON pc.agent_plugin_id = ap.id
+         WHERE ap.agent_id = $1 AND ap.plugin_id = 'plugin.whatsapp_baileys' AND pc.config_key = 'session_id'`,
+        [event.agentId]
+      );
+
+      if (configResult.rows.length === 0) {
+        logWarn('WhatsApp session not found for agent', { 
+          agentId: event.agentId,
+          messageId: event.messageId 
+        });
+        return;
+      }
+
+      const sessionId = JSON.parse(configResult.rows[0].config_value);
+
+      // Enviar via Baileys
+      await this.deliverViaBaileys(event, phoneNumber || '', whatsappChatId, sessionId);
 
     } catch (error) {
       logError('Error delivering to WhatsApp', error as Error, {
@@ -175,14 +188,47 @@ export class WhatsAppHandler extends BaseDeliveryHandler {
   }
 
   /**
-   * OPÇÃO 4: Self-hosted (Baileys/WPPConnect)
-   * Prós: Gratuito, controle total
-   * Contras: Complexo, pode violar ToS do WhatsApp, instável
-   * 
-   * Não recomendado para produção!
+   * Baileys - Implementação usando session-manager
+   * Envia mensagem via WhatsApp usando Baileys (API não oficial)
    */
-  private async deliverViaSelfHosted(event: ResponseEvent, phoneNumber: string): Promise<void> {
-    throw new Error('Self-hosted integration not recommended for production');
+  private async deliverViaBaileys(
+    event: ResponseEvent, 
+    phoneNumber: string,
+    whatsappChatId: string | undefined,
+    sessionId: string
+  ): Promise<void> {
+    try {
+      // Importar session manager dinamicamente
+      const { whatsappSessionManager } = await import('../../plugins/whatsapp_baileys/session-manager');
+      
+      // Determinar número de destino
+      const to = whatsappChatId || phoneNumber;
+      
+      if (!to) {
+        throw new Error('No destination (phoneNumber or whatsappChatId) provided');
+      }
+
+      // Enviar mensagem
+      await whatsappSessionManager.sendMessage(
+        event.agentId,
+        sessionId,
+        to,
+        event.response.message
+      );
+
+      logInfo('✅ WhatsApp message sent via Baileys', {
+        messageId: event.messageId,
+        agentId: event.agentId,
+        to: phoneNumber ? `***${phoneNumber.slice(-4)}` : undefined
+      });
+
+    } catch (error) {
+      logError('Failed to send WhatsApp message via Baileys', error as Error, {
+        messageId: event.messageId,
+        agentId: event.agentId
+      });
+      throw error;
+    }
   }
 }
 

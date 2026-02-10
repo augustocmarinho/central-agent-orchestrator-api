@@ -1,7 +1,7 @@
 import http from 'http';
 import app from './app';
 import { config } from './config';
-import { pool } from './db/postgres';
+import { pool, query } from './db/postgres';
 import { connectMongoDB } from './db/mongodb';
 import { ChatWebSocketServer } from './websocket/ChatWebSocket';
 import { registerDefaultPlugins } from './plugins';
@@ -31,6 +31,49 @@ const startServer = async () => {
     // Registrar plugins padrão
     await registerDefaultPlugins();
     logInfo('✅ Plugins padrão registrados');
+
+    // Restaurar sessões WhatsApp Baileys para agentes que já possuem configuração
+    try {
+      const { whatsappSessionManager } = await import('./plugins/whatsapp_baileys/session-manager');
+
+      const result = await query(
+        `SELECT ap.agent_id, pc.config_value AS session_id
+         FROM agent_plugins ap
+         JOIN plugin_configs pc ON pc.agent_plugin_id = ap.id
+         WHERE ap.plugin_id = 'plugin.whatsapp_baileys'
+           AND ap.is_active = TRUE
+           AND pc.config_key = 'session_id'`
+      );
+
+      if (result.rows.length === 0) {
+        logInfo('No WhatsApp Baileys sessions to restore on startup');
+      } else {
+        logInfo('Restoring WhatsApp Baileys sessions on startup', {
+          count: result.rows.length,
+        });
+
+        for (const row of result.rows) {
+          try {
+            const agentId: string = row.agent_id;
+            const sessionId: string = JSON.parse(row.session_id);
+
+            logInfo('Auto-starting WhatsApp Baileys session', { agentId, sessionId });
+            // Isso irá reutilizar as credenciais existentes em disco, sem pedir novo QR
+            whatsappSessionManager.startSession(agentId, sessionId);
+          } catch (err: any) {
+            logWarn('Failed to auto-start WhatsApp Baileys session', {
+              agentId: row.agent_id,
+              sessionId: row.session_id,
+              error: err?.message || String(err),
+            });
+          }
+        }
+      }
+    } catch (error: any) {
+      logWarn('Failed to restore WhatsApp Baileys sessions on startup', {
+        error: error?.message || String(error),
+      });
+    }
     
     // Validar configurações de segurança
     if (config.systemApiKeys.length > 0) {
@@ -125,6 +168,8 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
   logError('Uncaught Exception', error);
+  console.error('Full error:', error);
+  console.error('Stack:', error.stack);
   process.exit(1);
 });
 

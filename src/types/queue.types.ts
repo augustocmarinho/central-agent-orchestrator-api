@@ -13,7 +13,7 @@ export interface MessageJob {
   id: string;                     // UUID único da mensagem
   conversationId: string;          // ID da conversa
   agentId: string;                 // ID do agente
-  userId: string;                  // ID do usuário
+  userId?: string;                 // ID do usuário (opcional para canais externos)
   message: string;                 // Conteúdo da mensagem
   channel: MessageChannel;         // Canal de origem
   channelMetadata: ChannelMetadata; // Metadados específicos do canal

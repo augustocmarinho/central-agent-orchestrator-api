@@ -30,7 +30,11 @@ export class ChatService {
   async sendMessage(data: SendMessageData): Promise<any> {
     try {
       // 1. Validar que agente existe
-      const agent = await agentService.getAgentById(data.agentId, data.userId || '');
+      // Para mensagens de canais externos (WhatsApp, Telegram), usar getAgentByIdForSystem
+      const agent = data.userId 
+        ? await agentService.getAgentById(data.agentId, data.userId)
+        : await agentService.getAgentByIdForSystem(data.agentId);
+        
       if (!agent) {
         throw new Error('Agente não encontrado');
       }
@@ -75,11 +79,33 @@ export class ChatService {
         // Não falhar se der erro ao salvar mensagem, apenas logar
       }
 
+      // 4.1. Notificar clientes WebSocket sobre a nova mensagem do usuário
+      // Isso garante que mensagens vindas de canais externos (ex: WhatsApp)
+      // apareçam em tempo real no dashboard, sem precisar recarregar a página.
+      try {
+        const { WebHandler } = await import('../queues/handlers/web.handler');
+
+        WebHandler.broadcast({
+          type: 'user_message',
+          data: {
+            messageId,
+            conversationId,
+            content: data.content,
+            userId: data.userId,
+            timestamp: new Date().toISOString(),
+            // Para canais externos não há socket específico de origem
+            senderSocketId: undefined,
+          },
+        });
+      } catch (error: any) {
+        logError('Error broadcasting user message to WebSocket', error);
+      }
+
       // 5. Enfileirar mensagem para processamento assíncrono
       const result = await queueService.enqueueMessage({
         conversationId,
         agentId: data.agentId,
-        userId: data.userId || '',
+        userId: data.userId, // Pode ser undefined para canais externos
         message: data.content,
         channel: (data.channel as any) || 'web',
         channelMetadata: {

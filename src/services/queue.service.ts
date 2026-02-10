@@ -14,7 +14,7 @@ export class QueueService {
   async enqueueMessage(data: {
     conversationId: string;
     agentId: string;
-    userId: string;
+    userId?: string; // Opcional para canais externos (WhatsApp, Telegram, etc.)
     message: string;
     channel?: 'web' | 'whatsapp' | 'telegram' | 'api';
     channelMetadata?: any;
@@ -28,7 +28,7 @@ export class QueueService {
         id: messageId,
         conversationId: data.conversationId,
         agentId: data.agentId,
-        userId: data.userId,
+        userId: data.userId || undefined, // Pode ser undefined para canais externos
         message: data.message,
         channel: data.channel || 'web',
         channelMetadata: data.channelMetadata || {},

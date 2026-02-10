@@ -6,6 +6,7 @@ import { chatController } from '../controllers/chat.controller';
 import { messageController } from '../controllers/message.controller';
 import { conversationController } from '../controllers/conversation.controller';
 import { systemTokenController } from '../controllers/systemToken.controller';
+import { whatsappBaileysController } from '../controllers/whatsapp.controller';
 import { authMiddleware } from '../middleware/auth';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
 
@@ -68,5 +69,12 @@ router.get('/system-tokens/:id', authMiddleware, systemTokenController.getById.b
 router.delete('/system-tokens/:id', authMiddleware, systemTokenController.revoke.bind(systemTokenController));
 router.put('/system-tokens/:id/allowed-ips', authMiddleware, systemTokenController.updateAllowedIps.bind(systemTokenController));
 router.get('/system-tokens/:id/logs', authMiddleware, systemTokenController.getLogs.bind(systemTokenController));
+
+// WhatsApp Baileys routes (API não oficial)
+// No futuro, teremos rotas separadas para WhatsApp Business API (oficial)
+router.post('/whatsapp/baileys/start/:agentId', authMiddleware, whatsappBaileysController.startSession.bind(whatsappBaileysController));
+router.get('/whatsapp/baileys/qrcode/:agentId', authMiddleware, whatsappBaileysController.getQRCode.bind(whatsappBaileysController));
+router.get('/whatsapp/baileys/status/:agentId', authMiddleware, whatsappBaileysController.getStatus.bind(whatsappBaileysController));
+router.delete('/whatsapp/baileys/disconnect/:agentId', authMiddleware, whatsappBaileysController.disconnectSession.bind(whatsappBaileysController));
 
 export default router;

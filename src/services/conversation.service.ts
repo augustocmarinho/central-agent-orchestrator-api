@@ -100,6 +100,39 @@ export class ConversationService {
   }
 
   /**
+   * Busca conversa por número de telefone WhatsApp e agente
+   * Útil para canais externos que identificam usuários por número
+   */
+  async findConversationByPhoneAndAgent(
+    phoneNumber: string,
+    agentId: string,
+    channel: 'whatsapp' | 'telegram' = 'whatsapp'
+  ): Promise<IConversation | null> {
+    try {
+      const conversation = await Conversation.findOne({
+        agentId,
+        channel,
+        status: 'active',
+        // Importante: o campo correto é source.phoneNumber (ver ConversationSchema)
+        'source.phoneNumber': phoneNumber,
+      }).sort({ lastMessageAt: -1 }); // Pegar a mais recente
+
+      if (conversation) {
+        logInfo('Conversation found by phone', { 
+          conversationId: conversation.conversationId,
+          phoneNumber,
+          agentId 
+        });
+      }
+
+      return conversation;
+    } catch (error: any) {
+      logError('Error finding conversation by phone', error);
+      return null;
+    }
+  }
+
+  /**
    * Salva uma mensagem no MongoDB
    */
   async saveMessage(data: SaveMessageData): Promise<IMessage> {
@@ -277,7 +310,7 @@ export class ConversationService {
       offset?: number;
       order?: 'asc' | 'desc';
     }
-  ): Promise<IMessage[]> {
+  ): Promise<any[]> {
     try {
       const limit = options?.limit || 100;
       const offset = options?.offset || 0;
@@ -304,7 +337,7 @@ export class ConversationService {
       limit?: number;
       offset?: number;
     }
-  ): Promise<IConversation[]> {
+  ): Promise<any[]> {
     try {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
@@ -335,7 +368,7 @@ export class ConversationService {
       limit?: number;
       offset?: number;
     }
-  ): Promise<IConversation[]> {
+  ): Promise<any[]> {
     try {
       const limit = options?.limit || 50;
       const offset = options?.offset || 0;
