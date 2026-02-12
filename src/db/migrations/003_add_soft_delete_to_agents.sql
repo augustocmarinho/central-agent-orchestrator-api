@@ -1,6 +1,6 @@
 -- Adicionar soft delete na tabela agents
-ALTER TABLE agents 
-ADD COLUMN deleted_at TIMESTAMP DEFAULT NULL;
+ALTER TABLE agents
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL;
 
 -- Criar índice para performance em queries que filtram por deleted_at
 CREATE INDEX IF NOT EXISTS idx_agents_deleted_at ON agents(deleted_at);

@@ -7,6 +7,8 @@ export interface CreateAgentData {
   userId: string;
   name: string;
   creationMode: 'simple' | 'advanced';
+  aiModel?: string; // Modelo de IA para o chat (ex: gpt-4o-mini). Padrão: gpt-4o-mini
+  aiProvider?: string; // Provedor do modelo de IA (ex: openai, cursor). Padrão: openai
   objective?: string;
   persona?: string;
   audience?: string;
@@ -35,6 +37,8 @@ export interface Agent {
   userId: string;
   name: string;
   status: string;
+  aiModel: string;
+  aiProvider: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -131,12 +135,15 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
         finalPrompt = this.generatePromptFromData(data);
       }
       
+      const aiModel = data.aiModel ?? 'gpt-4o-mini';
+      const aiProvider = data.aiProvider ?? 'openai';
+
       // Criar agente (sempre nasce ativo)
       const agentResult = await query(
-        `INSERT INTO agents (id, user_id, name, status) 
-         VALUES ($1, $2, $3, 'active') 
+        `INSERT INTO agents (id, user_id, name, status, ai_model, ai_provider) 
+         VALUES ($1, $2, $3, 'active', $4, $5) 
          RETURNING *`,
-        [agentId, data.userId, data.name]
+        [agentId, data.userId, data.name, aiModel, aiProvider]
       );
       
       const agent = agentResult.rows[0];
@@ -183,6 +190,8 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       userId: row.user_id,
       name: row.name,
       status: row.status,
+      aiModel: row.ai_model ?? 'gpt-4o-mini',
+      aiProvider: row.ai_provider ?? 'openai',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -209,6 +218,8 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       userId: row.user_id,
       name: row.name,
       status: row.status,
+      aiModel: row.ai_model ?? 'gpt-4o-mini',
+      aiProvider: row.ai_provider ?? 'openai',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       prompt: {
@@ -249,6 +260,8 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       userId: row.user_id,
       name: row.name,
       status: row.status,
+      aiModel: row.ai_model ?? 'gpt-4o-mini',
+      aiProvider: row.ai_provider ?? 'openai',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       prompt: {

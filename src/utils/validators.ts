@@ -19,6 +19,12 @@ export const createAgentSchema = z.object({
     name: z.string().min(1, 'Nome é obrigatório'),
     creationMode: z.enum(['simple', 'advanced']),
     
+    // Modelo de IA para o chat (ex: gpt-4o-mini, gpt-4o). Padrão: gpt-4o-mini
+    aiModel: z.string().min(1).max(100).default('gpt-4o-mini'),
+    
+    // Provedor do modelo de IA (ex: openai, cursor). Padrão: openai
+    aiProvider: z.string().min(1).max(50).default('openai'),
+    
     // Campos do modo simplificado
     objective: z.string().optional(),
     persona: z.string().optional(),
