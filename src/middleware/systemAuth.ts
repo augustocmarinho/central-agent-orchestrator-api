@@ -11,8 +11,8 @@ export interface SystemAuthRequest extends Request {
 
 /**
  * Middleware para autenticação de sistemas externos (como N8N)
- * Suporta dois métodos:
- * 1. Tokens do banco de dados (header X-System-API-Key) - com validação de IP e expiração
+ * Suporta header X-System-API-Key (system token, não Bearer).
+ * 1. Tokens do banco de dados - com validação de IP e expiração
  * 2. API Keys de ambiente (legado, para compatibilidade)
  */
 export const systemAuthMiddleware = async (req: SystemAuthRequest, res: Response, next: NextFunction) => {
@@ -30,7 +30,7 @@ export const systemAuthMiddleware = async (req: SystemAuthRequest, res: Response
       });
       return res.status(401).json({ 
         success: false,
-        error: 'API Key não fornecida' 
+        error: 'API Key não fornecida (use X-System-API-Key)' 
       });
     }
     

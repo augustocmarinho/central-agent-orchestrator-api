@@ -1,0 +1,11 @@
+{
+  "id": "plugin.calendar",
+  "name": "Calendário",
+  "category": "agendamento",
+  "description": "Plugin de calendário para agendar, listar e cancelar eventos.",
+  "version": "1.0.0",
+  "auth_type": "none",
+  "supports_sandbox": true,
+  "config_schema": [],
+  "depends_on": []
+}

@@ -1,13 +1,13 @@
 // Registry de plugins disponíveis no sistema
 import { pluginService } from '../services/plugin.service';
-import calendarFakeManifest from './calendar_fake/manifest.json';
+import calendarManifest from './calendar/manifest.json';
 import echoManifest from './echo/manifest.json';
 import whatsappBaileysManifest from './whatsapp_baileys/manifest.json';
 
 export const defaultPlugins = [
   {
-    ...calendarFakeManifest,
-    manifest: calendarFakeManifest,
+    ...calendarManifest,
+    manifest: calendarManifest,
   },
   {
     ...echoManifest,
@@ -45,6 +45,6 @@ export const registerDefaultPlugins = async () => {
 };
 
 // Exportar handlers dos plugins
-export { default as calendarFakePlugin } from './calendar_fake/handler';
+export { default as calendarPlugin } from './calendar/handler';
 export { default as echoPlugin } from './echo/handler';
 export { default as whatsappBaileysPlugin } from './whatsapp_baileys/handler';

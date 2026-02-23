@@ -164,6 +164,37 @@ export class PluginService {
     
     return config;
   }
+
+  /** Get agent_plugin id for an installed plugin (used for config upsert). */
+  async getAgentPluginId(agentId: string, pluginId: string): Promise<string | null> {
+    const result = await query(
+      'SELECT id FROM agent_plugins WHERE agent_id = $1 AND plugin_id = $2 AND is_active = true',
+      [agentId, pluginId]
+    );
+    return result.rows[0]?.id ?? null;
+  }
+
+  /** Update or insert a single config key for a plugin installed on an agent. */
+  async updatePluginConfig(
+    agentId: string,
+    pluginId: string,
+    configKey: string,
+    configValue: unknown
+  ): Promise<void> {
+    const agentPluginId = await this.getAgentPluginId(agentId, pluginId);
+    if (!agentPluginId) {
+      throw new Error('Plugin não está instalado para este agente');
+    }
+    const valueStr = typeof configValue === 'string' ? configValue : JSON.stringify(configValue);
+    await query(
+      `INSERT INTO plugin_configs (agent_plugin_id, config_key, config_value)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (agent_plugin_id, config_key) DO UPDATE SET
+         config_value = EXCLUDED.config_value,
+         updated_at = CURRENT_TIMESTAMP`,
+      [agentPluginId, configKey, valueStr]
+    );
+  }
 }
 
 export const pluginService = new PluginService();

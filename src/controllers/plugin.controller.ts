@@ -145,6 +145,69 @@ export class PluginController {
       });
     }
   }
+
+  /** GET /agents/:agentId/plugins/:pluginId/config — returns { config } for the plugin (e.g. calendar). */
+  async getConfig(req: AuthRequest, res: Response) {
+    try {
+      const { agentId, pluginId } = req.params;
+      const agentPluginId = await pluginService.getAgentPluginId(agentId, pluginId);
+      if (!agentPluginId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Plugin não encontrado no agente',
+        });
+      }
+      const fullConfig = await pluginService.getPluginConfig(agentId, pluginId);
+      const config = fullConfig.config ?? {};
+      res.json({
+        success: true,
+        data: { config },
+      });
+    } catch (error: any) {
+      logError('Failed to get plugin config', error, {
+        agentId: req.params.agentId,
+        pluginId: req.params.pluginId,
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar configuração do plugin',
+      });
+    }
+  }
+
+  /** PUT /agents/:agentId/plugins/:pluginId/config — body: { config }. Saves under key "config". */
+  async updateConfig(req: AuthRequest, res: Response) {
+    try {
+      const { agentId, pluginId } = req.params;
+      const body = req.body as { config?: unknown };
+      if (body.config === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Campo "config" é obrigatório',
+        });
+      }
+      await pluginService.updatePluginConfig(agentId, pluginId, 'config', body.config);
+      res.json({
+        success: true,
+        data: { config: body.config },
+      });
+    } catch (error: any) {
+      if (error.message === 'Plugin não está instalado para este agente') {
+        return res.status(404).json({
+          success: false,
+          error: error.message,
+        });
+      }
+      logError('Failed to update plugin config', error, {
+        agentId: req.params.agentId,
+        pluginId: req.params.pluginId,
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao salvar configuração do plugin',
+      });
+    }
+  }
 }
 
 export const pluginController = new PluginController();

@@ -105,7 +105,7 @@ export class MessageConsumer {
           success: true,
           messageId: id,
           conversationId,
-          response: null,
+          response: undefined,
           processingTime,
         };
       }
@@ -125,14 +125,30 @@ export class MessageConsumer {
       
       const n8nResponse = await n8nService.callOpenAIChatWorkflow(n8nPayload);
 
-      if (!n8nResponse || !n8nResponse.message) {
-        throw new Error('Invalid N8N response');
+      // Aceitar message em response direto ou aninhado (workflow pode retornar { message } ou { response: { message } })
+      const messageText =
+        (n8nResponse && typeof n8nResponse.message === 'string' && n8nResponse.message) ||
+        (n8nResponse && typeof n8nResponse.response === 'string' && n8nResponse.response) ||
+        (n8nResponse && typeof n8nResponse === 'string' && n8nResponse);
+
+      if (!messageText || typeof messageText !== 'string') {
+        logWarn('Invalid N8N response shape', {
+          hasResponse: !!n8nResponse,
+          keys: n8nResponse ? Object.keys(n8nResponse) : [],
+          sample: n8nResponse ? JSON.stringify(n8nResponse).slice(0, 200) : undefined,
+        });
+        throw new Error('Invalid N8N response: missing or invalid message');
       }
+
+      const n8nResponseNormalized = {
+        ...(typeof n8nResponse === 'object' && n8nResponse !== null ? n8nResponse : {}),
+        message: messageText,
+      };
 
       logInfo('N8N response received', { 
         conversationId,
-        messageLength: n8nResponse.message.length,
-        tokensUsed: n8nResponse.tokens_used 
+        messageLength: n8nResponseNormalized.message.length,
+        tokensUsed: n8nResponseNormalized.tokens_used 
       });
 
       const processingTime = Date.now() - startTime;
@@ -146,7 +162,7 @@ export class MessageConsumer {
           conversationId,
           agentId,
           userId,
-          content: n8nResponse.message,
+          content: n8nResponseNormalized.message,
           type: 'assistant',
           direction: 'outbound',
           channel,
@@ -155,9 +171,9 @@ export class MessageConsumer {
           processedAt: new Date(),
           deliveredAt: new Date(),
           processingTime,
-          tokensUsed: n8nResponse.tokens_used || 0,
-          model: n8nResponse.model || 'unknown',
-          finishReason: n8nResponse.finish_reason || 'stop',
+          tokensUsed: n8nResponseNormalized.tokens_used || 0,
+          model: n8nResponseNormalized.model || 'unknown',
+          finishReason: n8nResponseNormalized.finish_reason || 'stop',
           replyToMessageId: userMessageId,
           jobId: job.id?.toString(),
         });
@@ -175,7 +191,7 @@ export class MessageConsumer {
 
       // 5. Publicar resposta no PubSub (80%)
       job.progress(80);
-      await this.publishResponse(job.data, n8nResponse, processingTime);
+      await this.publishResponse(job.data, n8nResponseNormalized, processingTime);
 
       // 6. Finalizado (100%)
       job.progress(100);
@@ -191,7 +207,7 @@ export class MessageConsumer {
         success: true,
         messageId: id,
         conversationId,
-        response: n8nResponse.message,
+        response: n8nResponseNormalized.message,
         processingTime,
       };
 

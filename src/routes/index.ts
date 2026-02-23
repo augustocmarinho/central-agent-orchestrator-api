@@ -6,6 +6,7 @@ import { chatController } from '../controllers/chat.controller';
 import { messageController } from '../controllers/message.controller';
 import { conversationController } from '../controllers/conversation.controller';
 import { systemTokenController } from '../controllers/systemToken.controller';
+import { toolController } from '../controllers/tool.controller';
 import { whatsappBaileysController } from '../controllers/whatsapp.controller';
 import { authMiddleware } from '../middleware/auth';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
@@ -31,6 +32,8 @@ router.post('/agents', authMiddleware, agentController.create.bind(agentControll
 router.get('/agents', authMiddleware, agentController.list.bind(agentController));
 // Allow system access to get agent details (for N8N)
 router.get('/agents/:id', flexibleAuthMiddleware, agentController.getOne.bind(agentController));
+router.get('/agents/:agentId/tools', flexibleAuthMiddleware, toolController.getTools.bind(toolController));
+router.post('/agents/:agentId/tools/execute', flexibleAuthMiddleware, toolController.executeTool.bind(toolController));
 router.put('/agents/:id', authMiddleware, agentController.update.bind(agentController));
 router.delete('/agents/:id', authMiddleware, agentController.delete.bind(agentController));
 
@@ -38,6 +41,8 @@ router.delete('/agents/:id', authMiddleware, agentController.delete.bind(agentCo
 router.get('/plugins', authMiddleware, pluginController.list.bind(pluginController));
 router.get('/plugins/:id', authMiddleware, pluginController.getOne.bind(pluginController));
 router.get('/agents/:agentId/plugins', flexibleAuthMiddleware, pluginController.listAgentPlugins.bind(pluginController));
+router.get('/agents/:agentId/plugins/:pluginId/config', flexibleAuthMiddleware, pluginController.getConfig.bind(pluginController));
+router.put('/agents/:agentId/plugins/:pluginId/config', authMiddleware, pluginController.updateConfig.bind(pluginController));
 router.post('/agents/:agentId/plugins', authMiddleware, pluginController.install.bind(pluginController));
 router.delete('/agents/:agentId/plugins/:pluginId', authMiddleware, pluginController.uninstall.bind(pluginController));
 
