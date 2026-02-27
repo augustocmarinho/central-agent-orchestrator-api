@@ -3,7 +3,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   WASocket,
   proto,
-  downloadMediaMessage
+  downloadMediaMessage,
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -118,11 +119,13 @@ class WhatsAppSessionManager {
       const authPath = path.join(this.authDir, sessionId);
       const { state, saveCreds } = await useMultiFileAuthState(authPath);
 
+      const { version } = await fetchLatestBaileysVersion()
       const socket = makeWASocket({
         auth: state,
         printQRInTerminal: false, // Não imprimir no terminal
-        browser: ['AI Agent Platform', 'Chrome', '1.0.0'],
+        browser: ['Chrome (Linux)', 'Chrome', '120.0.0'],
         defaultQueryTimeoutMs: undefined,
+        version,
       });
 
       session.socket = socket;
