@@ -3,14 +3,20 @@ import { BaseDeliveryHandler } from './delivery.handler';
 import { logInfo, logError, logWarn } from '../../utils/logger';
 import { WebSocket } from 'ws';
 
+// Map global para garantir que ChatWebSocket e chat.service (e outros módulos) usem
+// a MESMA instância, mesmo quando carregados por caminhos diferentes. Resolve
+// wsConnections=0 quando o front está conectado.
+const GLOBAL_WS_CONNECTIONS_KEY = '__web_handler_connections__';
+const g = global as typeof globalThis & { [key: string]: Map<string, WebSocket> | undefined };
+if (!g[GLOBAL_WS_CONNECTIONS_KEY]) {
+  g[GLOBAL_WS_CONNECTIONS_KEY] = new Map<string, WebSocket>();
+}
+const connections = g[GLOBAL_WS_CONNECTIONS_KEY]!;
+
 /**
  * Handler para entrega via WebSocket (canal web)
  */
 export class WebHandler extends BaseDeliveryHandler {
-  // Mapa estático de conexões WebSocket
-  // Será populado pelo ChatWebSocketServer
-  private static connections: Map<string, WebSocket> = new Map();
-
   getName(): string {
     return 'WebHandler';
   }
@@ -19,30 +25,30 @@ export class WebHandler extends BaseDeliveryHandler {
    * Registra uma conexão WebSocket
    */
   static registerConnection(socketId: string, ws: WebSocket) {
-    this.connections.set(socketId, ws);
-    logInfo('WebSocket registered', { socketId, totalConnections: this.connections.size });
+    connections.set(socketId, ws);
+    logInfo('WebSocket registered', { socketId, totalConnections: connections.size });
   }
 
   /**
    * Remove uma conexão WebSocket
    */
   static unregisterConnection(socketId: string) {
-    this.connections.delete(socketId);
-    logInfo('WebSocket unregistered', { socketId, totalConnections: this.connections.size });
+    connections.delete(socketId);
+    logInfo('WebSocket unregistered', { socketId, totalConnections: connections.size });
   }
 
   /**
    * Busca uma conexão WebSocket
    */
   static getConnection(socketId: string): WebSocket | undefined {
-    return this.connections.get(socketId);
+    return connections.get(socketId);
   }
 
   /**
    * Obtém todas as conexões
    */
   static getAllConnections(): Map<string, WebSocket> {
-    return this.connections;
+    return connections;
   }
 
   /**
@@ -145,13 +151,34 @@ export class WebHandler extends BaseDeliveryHandler {
   static broadcast(data: any) {
     let successCount = 0;
     
-    this.connections.forEach((ws, socketId) => {
+    connections.forEach((ws, socketId) => {
       if (this.sendToClient(socketId, data)) {
         successCount++;
       }
     });
 
-    logInfo('Broadcast sent', { totalConnections: this.connections.size, successCount });
+    logInfo('Broadcast sent', { totalConnections: connections.size, successCount });
+  }
+
+  /**
+   * Broadcast para clientes que estão na conversa OU no agente.
+   * Usado para mensagens de canais externos (WhatsApp, Telegram).
+   * Se nenhum cliente corresponder, faz fallback para broadcast geral.
+   */
+  static broadcastToAgentOrConversation(agentId: string, conversationId: string, data: any) {
+    let successCount = 0;
+
+    connections.forEach((ws: any, socketId) => {
+      const inConversation = ws.conversationId === conversationId;
+      const inAgent = ws.agentId === agentId;
+      if ((inConversation || inAgent) && this.sendToClient(socketId, data)) {
+        successCount++;
+      }
+    });
+
+    if (successCount === 0 && connections.size > 0) {
+      this.broadcast(data);
+    }
   }
 }
 

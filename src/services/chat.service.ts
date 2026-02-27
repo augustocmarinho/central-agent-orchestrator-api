@@ -86,7 +86,7 @@ export class ChatService {
         try {
           const { WebHandler } = await import('../queues/handlers/web.handler');
 
-          WebHandler.broadcast({
+          WebHandler.broadcastToAgentOrConversation(data.agentId, conversationId, {
             type: 'user_message',
             data: {
               messageId,
