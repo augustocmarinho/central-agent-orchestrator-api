@@ -204,8 +204,8 @@ export class WhatsAppBaileysController {
         });
       }
 
-      const sessionId = JSON.parse(configResult.rows[0].config_value);
-      const status = whatsappSessionManager.getConnectionStatus(agentId, sessionId);
+      const sessionId = String(JSON.parse(configResult.rows[0].config_value)).trim();
+      const status = whatsappSessionManager.getConnectionStatus(agentId.trim(), sessionId);
 
       res.json({
         success: true,
