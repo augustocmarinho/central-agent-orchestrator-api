@@ -301,5 +301,10 @@ class WhatsAppSessionManager {
   }
 }
 
-// Singleton
-export const whatsappSessionManager = new WhatsAppSessionManager();
+// Singleton via global (evita instâncias diferentes quando módulos são carregados por caminhos diferentes)
+const GLOBAL_KEY = '__whatsapp_session_manager__';
+const g = global as typeof globalThis & { [key: string]: WhatsAppSessionManager | undefined };
+if (!g[GLOBAL_KEY]) {
+  g[GLOBAL_KEY] = new WhatsAppSessionManager();
+}
+export const whatsappSessionManager = g[GLOBAL_KEY]!;
