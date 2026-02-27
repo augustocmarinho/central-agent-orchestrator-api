@@ -2,6 +2,7 @@ import { Conversation, IConversation, IContact } from '../models/mongodb/Convers
 import { Message, IMessage, MessageType, MessageDirection, MessageStatus } from '../models/mongodb/Message';
 import { logInfo, logError } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { extractNormalizedPhoneFromJid, normalizePhoneNumber } from '../utils/whatsapp-jid';
 
 /**
  * Interface para criar uma nova conversa
@@ -125,28 +126,109 @@ export class ConversationService {
   }
 
   /**
-   * Busca conversa por número de telefone WhatsApp e agente
-   * Útil para canais externos que identificam usuários por número
+   * Atualiza o phoneNumber do source quando obtemos o número real (ex: via remoteJidAlt ou getPNForLID).
+   * Útil para corrigir conversas que tinham o LID armazenado incorretamente como phoneNumber.
+   */
+  async updateSourcePhoneNumber(
+    conversationId: string,
+    phoneNumber: string
+  ): Promise<IConversation | null> {
+    try {
+      if (!phoneNumber?.trim()) return null;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { $set: { 'source.phoneNumber': phoneNumber.trim() } },
+        { new: true }
+      );
+      if (conversation) {
+        logInfo('Conversation phoneNumber updated', { conversationId, phoneNumber: `${phoneNumber.slice(0, 4)}***` });
+      }
+      return conversation;
+    } catch (error: any) {
+      logError('Error updating conversation phoneNumber', error);
+      return null;
+    }
+  }
+
+  /**
+   * Atualiza o whatsappChatId do source quando descobrimos formato diferente (@lid vs @s.whatsapp.net).
+   * Preferir @lid quando disponível (WhatsApp migrou para LIDs).
+   */
+  async updateSourceWhatsAppChatId(
+    conversationId: string,
+    whatsappChatId: string
+  ): Promise<IConversation | null> {
+    try {
+      if (!whatsappChatId?.includes('@')) return null;
+      const conversation = await Conversation.findOneAndUpdate(
+        { conversationId },
+        { $set: { 'source.whatsappChatId': whatsappChatId } },
+        { new: true }
+      );
+      if (conversation) {
+        logInfo('Conversation whatsappChatId updated', { conversationId, whatsappChatId });
+      }
+      return conversation;
+    } catch (error: any) {
+      logError('Error updating conversation whatsappChatId', error);
+      return null;
+    }
+  }
+
+  /**
+   * Busca conversa por número de telefone ou whatsappChatId e agente.
+   * Resolve duplicação quando o mesmo contato aparece como @lid ou @s.whatsapp.net.
+   *
+   * Busca por:
+   * - source.phoneNumber (valor exato ou normalizado)
+   * - source.whatsappChatId (prefixo do número + @lid ou @s.whatsapp.net)
    */
   async findConversationByPhoneAndAgent(
     phoneNumber: string,
     agentId: string,
-    channel: 'whatsapp' | 'telegram' = 'whatsapp'
+    channel: 'whatsapp' | 'telegram' = 'whatsapp',
+    whatsappChatId?: string
   ): Promise<IConversation | null> {
     try {
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const normalizedFromJid = whatsappChatId ? extractNormalizedPhoneFromJid(whatsappChatId) : '';
+
+      const orConditions: Record<string, any>[] = [
+        { 'source.phoneNumber': phoneNumber },
+        { 'source.phoneNumber': normalizedPhone },
+      ];
+
+      if (normalizedPhone) {
+        // Buscar por whatsappChatId que corresponda ao número (ex: 183163376656627@lid ou 183163376656627@s.whatsapp.net)
+        const escaped = normalizedPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        orConditions.push({
+          'source.whatsappChatId': new RegExp(`^${escaped}(:\\d+)?@`),
+        });
+      }
+
+      if (whatsappChatId) {
+        orConditions.push({ 'source.whatsappChatId': whatsappChatId });
+        if (normalizedFromJid && normalizedFromJid !== normalizedPhone) {
+          const escaped = normalizedFromJid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          orConditions.push({
+            'source.whatsappChatId': new RegExp(`^${escaped}(:\\d+)?@`),
+          });
+        }
+      }
+
       const conversation = await Conversation.findOne({
         agentId,
         channel,
         status: 'active',
-        // Importante: o campo correto é source.phoneNumber (ver ConversationSchema)
-        'source.phoneNumber': phoneNumber,
+        $or: orConditions,
       }).sort({ lastMessageAt: -1 }); // Pegar a mais recente
 
       if (conversation) {
-        logInfo('Conversation found by phone', { 
+        logInfo('Conversation found by phone', {
           conversationId: conversation.conversationId,
           phoneNumber,
-          agentId 
+          whatsappChatId,
+          agentId,
         });
       }
 

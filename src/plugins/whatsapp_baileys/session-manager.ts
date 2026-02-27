@@ -10,6 +10,13 @@ import path from 'path';
 import fs from 'fs';
 import { logInfo, logWarn, logError, logDebug } from '../../utils/logger';
 import { WhatsAppSession, ConnectionStatus } from './types';
+import {
+  extractNormalizedPhoneFromJid,
+  normalizePhoneNumber,
+  isLidJid,
+  isPnJid,
+  extractJidUser,
+} from '../../utils/whatsapp-jid';
 
 /** Delay inicial para reconexão (ms). */
 const INITIAL_RECONNECT_DELAY_MS = 3000;
@@ -471,6 +478,49 @@ class WhatsAppSessionManager {
   }
 
   /**
+   * Resolve o número de telefone real a partir de um remoteJid.
+   *
+   * Prioridade correta:
+   * 1. Se remoteJid é @s.whatsapp.net → usar o número do próprio remoteJid (já temos o PN)
+   * 2. Se remoteJid é @lid → usar remoteJidAlt (PN) ou getPNForLID; NUNCA usar valor do LID
+   *
+   * IMPORTANTE: remoteJidAlt pode ser LID quando remoteJid é PN - não priorizar remoteJidAlt
+   * cegamente, pois retornaria o LID em vez do número real.
+   */
+  private async resolvePhoneNumberFromJid(
+    socket: WASocket | null,
+    remoteJid: string,
+    remoteJidAlt?: string
+  ): Promise<string> {
+    // 1. Se remoteJid já é PN (@s.whatsapp.net), usar diretamente - é o número real
+    if (isPnJid(remoteJid)) {
+      const pn = extractNormalizedPhoneFromJid(remoteJid);
+      if (pn) return pn;
+    }
+    // 2. Se é @lid: remoteJidAlt contém o PN quando disponível (Baileys 6.8+)
+    if (isLidJid(remoteJid) && remoteJidAlt && isPnJid(remoteJidAlt)) {
+      const pn = extractNormalizedPhoneFromJid(remoteJidAlt);
+      if (pn) return pn;
+    }
+    // 3. Se é @lid, tentar getPNForLID do Baileys (mapeamento oficial)
+    if (socket && isLidJid(remoteJid)) {
+      try {
+        const pnJid = await socket.signalRepository?.lidMapping?.getPNForLID?.(remoteJid);
+        if (pnJid) {
+          const pn = extractNormalizedPhoneFromJid(pnJid);
+          if (pn) return pn;
+        }
+      } catch (err) {
+        logDebug('getPNForLID failed', { remoteJid, err });
+      }
+      // @lid sem mapeamento: NUNCA usar o valor do LID como phoneNumber
+      return '';
+    }
+    // 4. Fallback para outros formatos (ex: @g.us)
+    return extractNormalizedPhoneFromJid(remoteJid);
+  }
+
+  /**
    * Extrai texto de uma mensagem Baileys (proto.IMessage)
    * Cobre: conversation, extendedTextMessage, caption de mídia
    */
@@ -489,6 +539,7 @@ class WhatsAppSessionManager {
 
   /**
    * Processa mensagens recebidas (inbound = do contato) e enviadas pelo app (fromMe = do número conectado)
+   * Usa normalização @lid/@s.whatsapp.net para evitar chats duplicados do mesmo contato.
    */
   private async handleIncomingMessages(
     agentId: string,
@@ -499,14 +550,20 @@ class WhatsAppSessionManager {
     
     if (type !== 'notify') return;
 
+    const key = this.sessionKey(agentId, sessionId);
+    const session = this.sessions.get(key);
+    const socket = session?.socket ?? null;
+
     for (const message of messages) {
       try {
         const from = message.key?.remoteJid || '';
+        const remoteJidAlt = (message.key as any)?.remoteJidAlt;
         const messageText = this.extractMessageText(message);
 
         if (!messageText.trim()) continue;
 
-        const phoneNumber = from.split('@')[0];
+        // Resolver phoneNumber de forma unificada (@lid e @s.whatsapp.net)
+        const phoneNumber = await this.resolvePhoneNumberFromJid(socket, from, remoteJidAlt);
         // Nome do contato (display name) vindo do Baileys - message.pushName
         const pushName = typeof (message as any).pushName === 'string' ? (message as any).pushName.trim() : undefined;
 
@@ -521,6 +578,7 @@ class WhatsAppSessionManager {
           agentId,
           sessionId,
           from,
+          phoneNumber,
           pushName: pushName || undefined,
           messageLength: messageText.length
         });
@@ -529,10 +587,12 @@ class WhatsAppSessionManager {
           const { chatService } = await import('../../services/chat.service');
           const { conversationService } = await import('../../services/conversation.service');
           
+          // Buscar por phoneNumber E whatsappChatId para unificar @lid e @s.whatsapp.net
           const existingConversation = await conversationService.findConversationByPhoneAndAgent(
             phoneNumber,
             agentId,
-            'whatsapp'
+            'whatsapp',
+            from
           );
           
           await chatService.sendMessage({
@@ -544,13 +604,33 @@ class WhatsAppSessionManager {
               phoneNumber,
               whatsappChatId: from,
               platform: 'baileys',
-              name: pushName,
+              name: pushName || (isLidJid(from) && !phoneNumber ? 'Número oculto' : undefined),
             }
           });
 
           // Atualizar nome do contato na conversa existente quando temos pushName
           if (existingConversation?.conversationId && pushName) {
             await conversationService.updateSourceContactName(existingConversation.conversationId, { name: pushName });
+          }
+          // Corrigir phoneNumber quando está incorreto (LID armazenado) e temos o número real
+          if (existingConversation?.conversationId) {
+            const storedJid = existingConversation.source?.whatsappChatId;
+            const storedPhone = existingConversation.source?.phoneNumber;
+            const lidValue = isLidJid(from) ? extractJidUser(from) : '';
+            const storedPhoneIsLid = lidValue && storedPhone === lidValue;
+            // Número correto: da mensagem atual OU extraído do whatsappChatId quando é @s.whatsapp.net
+            const correctPhone = phoneNumber || (storedJid && isPnJid(storedJid) ? extractNormalizedPhoneFromJid(storedJid) : '');
+            const shouldUpdate = correctPhone && (!storedPhone || storedPhoneIsLid || storedPhone !== correctPhone);
+            if (shouldUpdate) {
+              await conversationService.updateSourcePhoneNumber(existingConversation.conversationId, correctPhone);
+            }
+          }
+          // Preferir @lid para envio futuro (WhatsApp migrou para LIDs)
+          if (existingConversation?.conversationId && isLidJid(from)) {
+            const storedJid = existingConversation.source?.whatsappChatId;
+            if (storedJid && !isLidJid(storedJid)) {
+              await conversationService.updateSourceWhatsAppChatId(existingConversation.conversationId, from);
+            }
           }
           
           logInfo('✅ WhatsApp message processed and queued', { agentId, from });
@@ -567,6 +647,7 @@ class WhatsAppSessionManager {
   /**
    * Processa mensagem enviada pelo app no celular conectado (fromMe).
    * Salva como assistant/outbound e publica para o front exibir no chat.
+   * Usa busca unificada por phoneNumber/whatsappChatId para evitar duplicatas @lid.
    */
   private async handleMessageSentFromPhone(
     agentId: string,
@@ -577,27 +658,31 @@ class WhatsAppSessionManager {
   ): Promise<void> {
     try {
       const { conversationService } = await import('../../services/conversation.service');
-      const { responsePublisher } = await import('../../queues/pubsub/publisher');
       const { v4: uuidv4 } = await import('uuid');
 
+      // Buscar por phoneNumber E whatsappChatId para unificar @lid e @s.whatsapp.net
       let conv = await conversationService.findConversationByPhoneAndAgent(
         phoneNumber,
         agentId,
-        'whatsapp'
+        'whatsapp',
+        remoteJid
       );
 
       if (!conv) {
         const { agentService } = await import('../../services/agent.service');
         const agent = await agentService.getAgentByIdForSystem(agentId);
         const conversationId = uuidv4();
+        // Usar phoneNumber normalizado; para @lid sem mapeamento, phoneNumber fica vazio
+        const normalizedPhone = normalizePhoneNumber(phoneNumber) || phoneNumber;
+        const displayName = normalizedPhone || (isLidJid(remoteJid) ? 'Número oculto' : 'Contato');
         conv = await conversationService.createOrGetConversation({
           conversationId,
           agentId,
           source: {
             type: 'whatsapp',
-            phoneNumber,
+            phoneNumber: normalizedPhone,
             whatsappChatId: remoteJid,
-            name: phoneNumber,
+            name: displayName,
             metadata: {},
           },
           destination: {
@@ -607,7 +692,7 @@ class WhatsAppSessionManager {
             metadata: { type: 'agent' },
           },
           channel: 'whatsapp',
-          channelMetadata: { phoneNumber, whatsappChatId: remoteJid, platform: 'baileys' },
+          channelMetadata: { phoneNumber: normalizedPhone, whatsappChatId: remoteJid, platform: 'baileys' },
         });
       }
 
