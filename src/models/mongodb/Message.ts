@@ -9,12 +9,13 @@ export type MessageDirection = 'inbound' | 'outbound';
 
 /**
  * Tipo/origem da mensagem
- * - user: mensagem enviada pelo usuário/cliente
+ * - user: mensagem enviada pelo usuário/cliente final
  * - assistant: mensagem gerada pela IA
+ * - operator: mensagem enviada por um operador humano (via chat web ou app do WhatsApp)
  * - system: mensagem do sistema (notificações, avisos, etc)
  * - external: mensagem de fonte externa (webhooks, integrações)
  */
-export type MessageType = 'user' | 'assistant' | 'system' | 'external';
+export type MessageType = 'user' | 'assistant' | 'operator' | 'system' | 'external';
 
 /**
  * Status de processamento da mensagem
@@ -84,7 +85,7 @@ const MessageSchema = new Schema<IMessage>({
   type: { 
     type: String, 
     required: true,
-    enum: ['user', 'assistant', 'system', 'external'],
+    enum: ['user', 'assistant', 'operator', 'system', 'external'],
     index: true
   },
   direction: { 

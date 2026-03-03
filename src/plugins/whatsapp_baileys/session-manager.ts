@@ -704,7 +704,7 @@ class WhatsAppSessionManager {
         conversationId,
         agentId,
         content: messageText,
-        type: 'assistant',
+        type: 'operator',
         direction: 'outbound',
         channel: 'whatsapp',
         channelMetadata: { phoneNumber, whatsappChatId: remoteJid, platform: 'baileys' },
@@ -720,6 +720,7 @@ class WhatsAppSessionManager {
         messageId,
         conversationId,
         agentId,
+        messageType: 'operator',
         response: {
           message: messageText,
           tokensUsed: 0,

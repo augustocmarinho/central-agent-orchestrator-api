@@ -246,9 +246,10 @@ export class ConversationService {
     try {
       const messageId = data.messageId || uuidv4();
 
-      // Determinar role baseado no type
+      // Determinar role baseado no type (compatibilidade com contexto de IA)
+      // operator também usa role 'assistant' pois está no lado de resposta da conversa
       let role: 'user' | 'assistant' | 'system' = 'user';
-      if (data.type === 'assistant') role = 'assistant';
+      if (data.type === 'assistant' || data.type === 'operator') role = 'assistant';
       else if (data.type === 'system') role = 'system';
 
       // Criar mensagem
@@ -350,7 +351,7 @@ export class ConversationService {
 
       if (messageType === 'user') {
         updateData.$inc.userMessageCount = 1;
-      } else if (messageType === 'assistant') {
+      } else if (messageType === 'assistant' || messageType === 'operator') {
         updateData.$inc.assistantMessageCount = 1;
       }
 

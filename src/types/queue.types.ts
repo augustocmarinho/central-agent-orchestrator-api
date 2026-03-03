@@ -48,6 +48,8 @@ export interface ResponseEvent {
   messageId: string;               // ID da mensagem original
   conversationId: string;          // ID da conversa
   agentId: string;                 // ID do agente
+  /** Tipo da mensagem: 'assistant' = IA, 'operator' = humano, 'system' = sistema */
+  messageType?: 'assistant' | 'operator' | 'system';
   response: {
     message: string;               // Resposta da IA
     tokensUsed: number;            // Tokens consumidos

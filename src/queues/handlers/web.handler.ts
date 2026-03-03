@@ -66,6 +66,7 @@ export class WebHandler extends BaseDeliveryHandler {
         conversationId: event.conversationId,
         message: event.response.message,
         timestamp: event.timestamp,
+        messageType: event.messageType ?? 'assistant',
         metadata: {
           model: event.response.model,
           tokensUsed: event.response.tokensUsed,

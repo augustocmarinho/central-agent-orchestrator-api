@@ -204,7 +204,7 @@ export class ChatWebSocketServer {
             agentId: data.agentId,
             userId: ws.userId,
             content: data.content,
-            type: 'assistant',
+            type: 'operator',
             direction: 'outbound',
             channel: 'whatsapp',
             channelMetadata: { ...channelMetadata },
@@ -216,6 +216,7 @@ export class ChatWebSocketServer {
             messageId,
             conversationId,
             agentId: data.agentId,
+            messageType: 'operator',
             response: {
               message: data.content,
               tokensUsed: 0,

@@ -253,6 +253,7 @@ export class MessageConsumer {
       messageId: jobData.id,
       conversationId: jobData.conversationId,
       agentId: jobData.agentId,
+      messageType: 'assistant',
       response: {
         message: n8nResponse.message,
         tokensUsed: n8nResponse.tokens_used || 0,
