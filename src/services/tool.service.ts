@@ -1,5 +1,7 @@
 import { pluginService } from './plugin.service';
+import { conversationService } from './conversation.service';
 import { pluginHandlers, PluginExecuteContext } from '@/plugins/registry';
+import { logInfo } from '../utils/logger';
 
 // Formato OpenAI Responses API - item de tool
 export interface OpenAIToolDefinition {
@@ -9,6 +11,27 @@ export interface OpenAIToolDefinition {
   parameters: Record<string, unknown>;
   strict?: boolean;
 }
+
+// Tools de sistema — sempre disponíveis para todos os agentes, sem precisar de plugin
+const SYSTEM_TOOLS: OpenAIToolDefinition[] = [
+  {
+    type: 'function',
+    name: 'transfer_to_human',
+    description: 'Transfere a conversa para um atendente humano. Use quando o cliente solicitar falar com uma pessoa real, quando não souber responder, ou quando a situação exigir intervenção humana.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Motivo da transferência (ex: "Cliente solicitou atendente humano", "Dúvida fora do escopo")',
+        },
+      },
+      required: ['reason'],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+];
 
 // Convenção: prefixo do nome da tool -> plugin id (ex: calendar_ -> plugin.calendar)
 const TOOL_PREFIX_TO_PLUGIN_ID: Record<string, string> = {
@@ -48,14 +71,32 @@ export class ToolService {
       }
     }
 
+    // Sempre incluir tools de sistema
+    allTools.push(...SYSTEM_TOOLS);
+
     return allTools;
   }
 
   async executeTool(
     agentId: string,
-    params: { call_id: string; name: string; arguments: string }
+    params: { call_id: string; name: string; arguments: string; conversationId?: string }
   ): Promise<string> {
-    const { name, arguments: argsStr } = params;
+    const { name, arguments: argsStr, conversationId } = params;
+
+    // Parsear argumentos antes de qualquer execução
+    let parsedArgs: Record<string, unknown> = {};
+    try {
+      parsedArgs = argsStr ? JSON.parse(argsStr) : {};
+    } catch {
+      return JSON.stringify({ success: false, error: 'arguments inválidos (JSON)' });
+    }
+
+    // System tools — executar diretamente sem plugin
+    if (name === 'transfer_to_human') {
+      return this.executeTransferToHuman(conversationId, parsedArgs);
+    }
+
+    // Plugin tools — lookup por prefixo
     const pluginId = getPluginIdForTool(name);
     if (!pluginId) {
       return JSON.stringify({ success: false, error: `Tool desconhecida: ${name}` });
@@ -72,16 +113,9 @@ export class ToolService {
       return JSON.stringify({ success: false, error: `Handler não suporta execução para: ${name}` });
     }
 
-    let parsedArgs: Record<string, unknown> = {};
-    try {
-      parsedArgs = argsStr ? JSON.parse(argsStr) : {};
-    } catch {
-      return JSON.stringify({ success: false, error: 'arguments inválidos (JSON)' });
-    }
-
     const config = await pluginService.getPluginConfig(agentId, pluginId);
     const action = getActionFromToolName(name, pluginId);
-    const context: PluginExecuteContext = { agentId };
+    const context: PluginExecuteContext = { agentId, conversationId };
     const result = await (handler as { execute: (a: string, d: Record<string, unknown>, c: Record<string, unknown>, ctx?: PluginExecuteContext) => Promise<unknown> }).execute(
       action,
       parsedArgs,
@@ -97,6 +131,29 @@ export class ToolService {
       return JSON.stringify(resultObj);
     }
     return JSON.stringify(result);
+  }
+
+  private async executeTransferToHuman(
+    conversationId: string | undefined,
+    args: Record<string, unknown>
+  ): Promise<string> {
+    if (!conversationId) {
+      return JSON.stringify({ success: false, error: 'conversationId não disponível para transferência' });
+    }
+
+    const reason = (args.reason as string) || 'Transferência solicitada';
+
+    await conversationService.updateConversationStatus(conversationId, 'paused');
+
+    logInfo('Conversation transferred to human', { conversationId, reason });
+
+    return JSON.stringify({
+      success: true,
+      data: {
+        message: 'Conversa transferida para atendimento humano. A IA foi pausada para esta conversa.',
+        reason,
+      },
+    });
   }
 }
 

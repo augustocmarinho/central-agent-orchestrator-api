@@ -3,6 +3,7 @@ import calendarPlugin from './calendar/handler';
 
 export interface PluginExecuteContext {
   agentId: string;
+  conversationId?: string;
 }
 
 export interface PluginHandler {

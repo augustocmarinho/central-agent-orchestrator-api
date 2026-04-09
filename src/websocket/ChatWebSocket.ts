@@ -194,6 +194,56 @@ export class ChatWebSocketServer {
         }
       }
 
+      // Se a conversa está pausada, o operador está no controle manual: salvar como operador e entregar diretamente
+      if (conv && conv.status === 'paused' && conversationId) {
+        const messageId = uuidv4();
+        try {
+          await conversationService.saveMessage({
+            messageId,
+            conversationId,
+            agentId: data.agentId,
+            userId: ws.userId,
+            content: data.content,
+            type: 'operator',
+            direction: 'outbound',
+            channel,
+            channelMetadata: { ...channelMetadata },
+            status: 'delivered',
+            processedAt: new Date(),
+            deliveredAt: new Date(),
+          });
+          await responsePublisher.publishResponse({
+            messageId,
+            conversationId,
+            agentId: data.agentId,
+            messageType: 'operator',
+            response: {
+              message: data.content,
+              tokensUsed: 0,
+              model: 'operator',
+              finishReason: 'stop',
+            },
+            channel,
+            channelMetadata: { ...channelMetadata },
+            timestamp: new Date().toISOString(),
+            processingTime: 0,
+          });
+          this.sendMessage(ws, {
+            type: 'delivered',
+            data: {
+              conversationId,
+              messageId,
+              status: 'delivered',
+              message: 'Mensagem do operador enviada.',
+            },
+          });
+        } catch (err: any) {
+          console.error('Erro ao enviar mensagem de operador (conversa pausada)', err);
+          this.sendError(ws, err.message || 'Erro ao enviar mensagem');
+        }
+        return;
+      }
+
       // Se é conversa WhatsApp e o operador está enviando pelo chat web: entregar ao WhatsApp, não à IA
       if (channel === 'whatsapp' && conv && conversationId) {
         const messageId = uuidv4();

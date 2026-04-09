@@ -110,6 +110,37 @@ export class MessageConsumer {
         };
       }
 
+      // 1.2. Se a conversa estiver pausada, não gerar resposta da IA
+      const conversation = await conversationService.getConversation(conversationId);
+      if (conversation && conversation.status === 'paused') {
+        logInfo('Conversation is paused, skipping AI response', {
+          conversationId,
+          agentId,
+          channel,
+        });
+
+        if (userMessageId) {
+          try {
+            await conversationService.updateMessageStatus(userMessageId, 'delivered', {
+              processedAt: new Date(),
+              deliveredAt: new Date(),
+            });
+          } catch (error: any) {
+            logError('Error updating message status for paused conversation', error);
+          }
+        }
+
+        const processingTime = Date.now() - startTime;
+
+        return {
+          success: true,
+          messageId: id,
+          conversationId,
+          response: undefined,
+          processingTime,
+        };
+      }
+
       // 2. Preparar payload para N8N (30%)
       // O N8N vai buscar o histórico automaticamente do Redis (chave: chat:{conversationId})
       job.progress(30);

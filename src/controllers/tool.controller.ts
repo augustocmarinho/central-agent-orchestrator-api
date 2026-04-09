@@ -26,7 +26,7 @@ export class ToolController {
   async executeTool(req: AuthRequest & SystemAuthRequest, res: Response) {
     try {
       const { agentId } = req.params;
-      const body = req.body as { call_id?: string; name?: string; arguments?: string };
+      const body = req.body as { call_id?: string; name?: string; arguments?: string; conversation_id?: string };
 
       if (!body.name || typeof body.name !== 'string') {
         return res.status(400).json({
@@ -39,6 +39,7 @@ export class ToolController {
         call_id: typeof body.call_id === 'string' ? body.call_id : '',
         name: body.name,
         arguments: typeof body.arguments === 'string' ? body.arguments : '{}',
+        conversationId: typeof body.conversation_id === 'string' ? body.conversation_id : undefined,
       });
 
       // A API Responses espera string em function_call_output.output; call_id para o n8n montar o loop

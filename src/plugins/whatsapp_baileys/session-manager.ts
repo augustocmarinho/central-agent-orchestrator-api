@@ -360,12 +360,30 @@ class WhatsAppSessionManager {
         }
 
         if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.connectionReplaced) {
-          logInfo('Reconnection aborted: session ended', {
+          logInfo('Reconnection aborted: session ended, clearing credentials for fresh QR on next connect', {
             agentId,
             sessionId,
             disconnectReason: reasonName,
           });
-          this.clearSession(key, false);
+          // Limpar socket e credenciais, mas MANTER sessão no Map com phoneNumber/lastConnected
+          // para que o frontend exiba ao usuário qual número foi desconectado e por quê.
+          this.cancelReconnectTimeout(session);
+          if (session.socket) {
+            try { removeSocketListeners(session.socket); } catch (_) { /* ignore */ }
+            session.socket = null;
+          }
+          session.status = 'disconnected';
+          session.qrCode = null;
+          session.disconnectReason = reasonName;
+          // Limpar credenciais do disco para que próxima conexão gere novo QR
+          const sessionAuthPath = path.join(this.authDir, sessionId);
+          if (fs.existsSync(sessionAuthPath)) {
+            try {
+              fs.rmSync(sessionAuthPath, { recursive: true, force: true });
+            } catch (e) {
+              logError('Failed to remove auth folder after session ended', e as Error, { agentId, sessionId });
+            }
+          }
           return;
         }
 
@@ -463,6 +481,7 @@ class WhatsAppSessionManager {
       } catch (_) { /* ignore */ }
       session.socket = null;
     }
+    session.disconnectReason = undefined;
 
     try {
       const authPath = path.join(this.authDir, sessionId);
@@ -844,6 +863,7 @@ class WhatsAppSessionManager {
       phoneNumber: session.phoneNumber,
       lastConnected: session.lastConnected,
       needsQR: session.status === 'qr_ready' || session.status === 'connecting' || session.status === 'reconnecting',
+      disconnectReason: session.disconnectReason,
     };
   }
 

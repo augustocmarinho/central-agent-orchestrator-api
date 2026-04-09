@@ -219,7 +219,7 @@ export class ConversationService {
       const conversation = await Conversation.findOne({
         agentId,
         channel,
-        status: 'active',
+        status: { $in: ['active', 'paused'] },
         $or: orConditions,
       }).sort({ lastMessageAt: -1 }); // Pegar a mais recente
 

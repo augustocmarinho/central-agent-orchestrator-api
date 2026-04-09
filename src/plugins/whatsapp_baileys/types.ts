@@ -19,6 +19,8 @@ export interface WhatsAppSession {
   reconnectAttempts?: number;
   /** Timeout id da reconexão agendada; usado para cancelar e evitar múltiplas reconexões. */
   reconnectTimeoutId?: ReturnType<typeof setTimeout> | null;
+  /** Motivo da desconexão (ex.: loggedOut, connectionReplaced). Exibido ao usuário no frontend. */
+  disconnectReason?: string;
 }
 
 export interface WhatsAppMessage {
@@ -42,4 +44,6 @@ export interface ConnectionStatus {
   phoneNumber?: string;
   lastConnected?: Date;
   needsQR: boolean;
+  /** Motivo da última desconexão (ex.: loggedOut, connectionReplaced). */
+  disconnectReason?: string;
 }
