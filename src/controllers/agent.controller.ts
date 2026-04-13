@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { SystemAuthRequest } from '../middleware/systemAuth';
 import { agentService } from '../services/agent.service';
+import { toolService } from '../services/tool.service';
+import { getAgentContextCache, setAgentContextCache } from '../config/redis.config';
 import { createAgentSchema, updateAgentSchema } from '../utils/validators';
 import { logInfo, logError, logWarn } from '../utils/logger';
 import { ZodError } from 'zod';
@@ -119,6 +121,55 @@ export class AgentController {
     }
   }
   
+  /**
+   * Retorna agente + tools em uma única chamada (usado pelo n8n para evitar 2 roundtrips).
+   * GET /api/agents/:id/context
+   */
+  async getContext(req: AuthRequest & SystemAuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const isSystemRequest = (req as SystemAuthRequest).isSystemRequest;
+
+      // Cache Redis — evita queries repetidas durante conversas ativas
+      const cached = await getAgentContextCache(id);
+      if (cached) {
+        // Para requisições de usuário, validar ownership mesmo com cache
+        if (!isSystemRequest) {
+          const userId = req.user!.userId;
+          const agent = await agentService.getAgentById(id, userId);
+          if (!agent) {
+            return res.status(404).json({ success: false, error: 'Agente não encontrado' });
+          }
+        }
+        return res.json({ success: true, data: cached });
+      }
+
+      const agent = isSystemRequest
+        ? await agentService.getAgentByIdForSystem(id)
+        : await agentService.getAgentById(id, req.user!.userId);
+
+      if (!agent) {
+        return res.status(404).json({ success: false, error: 'Agente não encontrado' });
+      }
+
+      const tools = await toolService.getToolsForAgent(id);
+
+      // Salvar no cache para próximas chamadas
+      await setAgentContextCache(id, agent, tools);
+
+      res.json({
+        success: true,
+        data: { agent, tools },
+      });
+    } catch (error: any) {
+      logError('Error fetching agent context', error, {
+        agentId: req.params.id,
+        isSystemRequest: (req as SystemAuthRequest).isSystemRequest,
+      });
+      res.status(500).json({ success: false, error: 'Erro ao buscar contexto do agente' });
+    }
+  }
+
   async update(req: AuthRequest, res: Response) {
     try {
       const userId = req.user!.userId;

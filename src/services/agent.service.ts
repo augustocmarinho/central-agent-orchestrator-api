@@ -1,6 +1,7 @@
 import { query } from '../db/postgres';
 import { v4 as uuidv4 } from 'uuid';
 import { n8nService } from './n8n.service';
+import { invalidateAgentContextCache } from '../config/redis.config';
 import { logInfo, logError, logWarn } from '../utils/logger';
 
 export interface CreateAgentData {
@@ -234,27 +235,27 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       },
     };
   }
-  
+
   /**
    * Busca um agente pelo ID sem validar userId
    * Usado por sistemas externos (N8N) com System Token
    */
   async getAgentByIdForSystem(agentId: string): Promise<AgentWithPrompt | null> {
     const result = await query(
-      `SELECT a.*, ap.objective, ap.persona, ap.audience, ap.topics, 
+      `SELECT a.*, ap.objective, ap.persona, ap.audience, ap.topics,
               ap.restrictions, ap.knowledge_source, ap.final_prompt, ap.creation_mode
        FROM agents a
        LEFT JOIN agent_prompts ap ON a.id = ap.agent_id
        WHERE a.id = $1 AND a.deleted_at IS NULL`,
       [agentId]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
+
     const row = result.rows[0];
-    
+
     return {
       id: row.id,
       userId: row.user_id,
@@ -286,22 +287,22 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
         const updates: string[] = [];
         const values: any[] = [];
         let paramCount = 1;
-        
+
         if (data.name) {
           updates.push(`name = $${paramCount++}`);
           values.push(data.name);
         }
-        
+
         if (data.status) {
           updates.push(`status = $${paramCount++}`);
           values.push(data.status);
         }
-        
+
         updates.push(`updated_at = CURRENT_TIMESTAMP`);
         values.push(agentId, userId);
-        
+
         await query(
-          `UPDATE agents SET ${updates.join(', ')} 
+          `UPDATE agents SET ${updates.join(', ')}
            WHERE id = $${paramCount++} AND user_id = $${paramCount++} AND deleted_at IS NULL`,
           values
         );
@@ -349,7 +350,9 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
       }
       
       await query('COMMIT');
-      
+
+      await invalidateAgentContextCache(agentId);
+
       return this.getAgentById(agentId, userId);
     } catch (error) {
       await query('ROLLBACK');

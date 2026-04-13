@@ -32,6 +32,7 @@ router.post('/agents', authMiddleware, agentController.create.bind(agentControll
 router.get('/agents', authMiddleware, agentController.list.bind(agentController));
 // Allow system access to get agent details (for N8N)
 router.get('/agents/:id', flexibleAuthMiddleware, agentController.getOne.bind(agentController));
+router.get('/agents/:id/context', flexibleAuthMiddleware, agentController.getContext.bind(agentController));
 router.get('/agents/:agentId/tools', flexibleAuthMiddleware, toolController.getTools.bind(toolController));
 router.post('/agents/:agentId/tools/execute', flexibleAuthMiddleware, toolController.executeTool.bind(toolController));
 router.put('/agents/:id', authMiddleware, agentController.update.bind(agentController));

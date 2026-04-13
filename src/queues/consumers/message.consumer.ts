@@ -54,11 +54,15 @@ export class MessageConsumer {
       channel 
     });
 
-    // Atualizar status da mensagem do usuário para "processing"
+    // Atualizar status da(s) mensagem(ns) do usuário para "processing"
+    // Se é um batch de debounce, atualizar todas as mensagens originais
+    const debouncedMessageIds: string[] | undefined = job.data.channelMetadata?.debouncedMessageIds;
     const userMessageId = job.data.channelMetadata?.userMessageId;
-    if (userMessageId) {
+    const allUserMessageIds = debouncedMessageIds || (userMessageId ? [userMessageId] : []);
+
+    for (const msgId of allUserMessageIds) {
       try {
-        await conversationService.updateMessageStatus(userMessageId, 'processing', {
+        await conversationService.updateMessageStatus(msgId, 'processing', {
           processedAt: new Date()
         });
       } catch (error: any) {
@@ -79,17 +83,17 @@ export class MessageConsumer {
 
       // 1.1. Se o agente estiver pausado/draft, não gerar resposta
       if (agent.status !== 'active') {
-        logInfo('Agent is not active, skipping response generation', { 
-          agentId, 
+        logInfo('Agent is not active, skipping response generation', {
+          agentId,
           status: agent.status,
           channel,
         });
 
-        // Marcar mensagem do usuário como "delivered" para indicar que foi processada,
+        // Marcar mensagem(ns) do usuário como "delivered" para indicar que foi processada,
         // mas sem resposta automática.
-        if (userMessageId) {
+        for (const msgId of allUserMessageIds) {
           try {
-            await conversationService.updateMessageStatus(userMessageId, 'delivered', {
+            await conversationService.updateMessageStatus(msgId, 'delivered', {
               processedAt: new Date(),
               deliveredAt: new Date(),
             });
@@ -119,9 +123,9 @@ export class MessageConsumer {
           channel,
         });
 
-        if (userMessageId) {
+        for (const msgId of allUserMessageIds) {
           try {
-            await conversationService.updateMessageStatus(userMessageId, 'delivered', {
+            await conversationService.updateMessageStatus(msgId, 'delivered', {
               processedAt: new Date(),
               deliveredAt: new Date(),
             });
@@ -209,11 +213,15 @@ export class MessageConsumer {
           jobId: job.id?.toString(),
         });
 
-        // Atualizar status da mensagem do usuário para "delivered"
-        if (userMessageId) {
-          await conversationService.updateMessageStatus(userMessageId, 'delivered', {
-            deliveredAt: new Date()
-          });
+        // Atualizar status da(s) mensagem(ns) do usuário para "delivered"
+        for (const msgId of allUserMessageIds) {
+          try {
+            await conversationService.updateMessageStatus(msgId, 'delivered', {
+              deliveredAt: new Date()
+            });
+          } catch (error: any) {
+            logError('Error updating user message status to delivered', error);
+          }
         }
       } catch (error: any) {
         logError('Error saving assistant message', error);
@@ -253,10 +261,10 @@ export class MessageConsumer {
         maxAttempts: job.opts.attempts 
       });
 
-      // Marcar mensagem do usuário como failed
-      if (userMessageId) {
+      // Marcar mensagem(ns) do usuário como failed
+      for (const msgId of allUserMessageIds) {
         try {
-          await conversationService.updateMessageStatus(userMessageId, 'failed', {
+          await conversationService.updateMessageStatus(msgId, 'failed', {
             error: {
               message: error.message,
               code: 'PROCESSING_ERROR',

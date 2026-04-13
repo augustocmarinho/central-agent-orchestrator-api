@@ -21,6 +21,8 @@ export const REDIS_NAMESPACES = {
   BULL_QUEUE: 'bull',              // Usado pelo Bull (automático)
   PUBSUB_RESPONSE: 'pubsub:response:', // Canais de resposta
   PUBSUB_CONVERSATION: 'pubsub:conversation:', // Canais por conversa
+  AGENT_CONTEXT: 'agent_ctx:',    // Cache de contexto do agente (agent + tools)
+  DEBOUNCE_BUFFER: 'debounce:',   // Buffer de mensagens para debounce
 } as const;
 
 // Cliente Redis para operações gerais (histórico, cache, etc)
@@ -102,6 +104,43 @@ export async function closeRedisConnections() {
   await Promise.all(promises);
   logInfo('✅ All Redis connections closed');
 }
+
+// ─── Cache de contexto do agente (agent + tools) ────────────────────
+
+const AGENT_CONTEXT_TTL = 120; // 2 minutos — safety net; invalidação ativa garante freshness
+
+export async function getAgentContextCache(agentId: string): Promise<{ agent: any; tools: any[] } | null> {
+  try {
+    const data = await getRedisClient().get(`${REDIS_NAMESPACES.AGENT_CONTEXT}${agentId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    logError('Error reading agent context cache', error as Error, { agentId });
+    return null;
+  }
+}
+
+export async function setAgentContextCache(agentId: string, agent: any, tools: any[]): Promise<void> {
+  try {
+    await getRedisClient().setex(
+      `${REDIS_NAMESPACES.AGENT_CONTEXT}${agentId}`,
+      AGENT_CONTEXT_TTL,
+      JSON.stringify({ agent, tools })
+    );
+  } catch (error) {
+    logError('Error writing agent context cache', error as Error, { agentId });
+  }
+}
+
+export async function invalidateAgentContextCache(agentId: string): Promise<void> {
+  try {
+    await getRedisClient().del(`${REDIS_NAMESPACES.AGENT_CONTEXT}${agentId}`);
+    logInfo('Agent context cache invalidated', { agentId });
+  } catch (error) {
+    logError('Error invalidating agent context cache', error as Error, { agentId });
+  }
+}
+
+// ─── Histórico de chat ──────────────────────────────────────────────
 
 // Helper: Buscar histórico de chat (compatível com N8N)
 export async function getChatHistory(conversationId: string): Promise<any[]> {

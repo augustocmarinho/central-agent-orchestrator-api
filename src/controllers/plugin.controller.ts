@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { pluginService } from '../services/plugin.service';
+import { invalidateAgentContextCache } from '../config/redis.config';
 import { installPluginSchema } from '../utils/validators';
 import { logInfo, logError, logWarn } from '../utils/logger';
 import { ZodError } from 'zod';
@@ -59,12 +60,14 @@ export class PluginController {
         ...validated,
       });
       
-      logInfo('Plugin installed successfully', { 
-        agentId, 
+      await invalidateAgentContextCache(agentId);
+
+      logInfo('Plugin installed successfully', {
+        agentId,
         pluginId: validated.pluginId,
-        userId: req.user?.userId 
+        userId: req.user?.userId
       });
-      
+
       res.status(201).json({
         success: true,
         data: { installation },
@@ -124,12 +127,14 @@ export class PluginController {
         });
       }
       
-      logInfo('Plugin uninstalled successfully', { 
-        agentId, 
+      await invalidateAgentContextCache(agentId);
+
+      logInfo('Plugin uninstalled successfully', {
+        agentId,
         pluginId,
-        userId: req.user?.userId 
+        userId: req.user?.userId
       });
-      
+
       res.json({
         success: true,
         message: 'Plugin desinstalado com sucesso',
@@ -187,6 +192,7 @@ export class PluginController {
         });
       }
       await pluginService.updatePluginConfig(agentId, pluginId, 'config', body.config);
+      await invalidateAgentContextCache(agentId);
       res.json({
         success: true,
         data: { config: body.config },

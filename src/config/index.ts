@@ -57,4 +57,11 @@ export const config = {
     level: process.env.LOG_LEVEL || 'info',
     toFile: process.env.LOG_TO_FILE === 'true',
   },
+
+  // Debounce de mensagens — agrupa mensagens sequenciais antes de enviar à IA
+  debounce: {
+    ms: parseInt(process.env.DEBOUNCE_MS || '0', 10),               // Janela deslizante em ms. 0 = desabilitado. Recomendado: 3000-5000
+    maxMs: parseInt(process.env.DEBOUNCE_MAX_MS || '30000', 10),     // Hard cap de tempo (ms). Padrão: 30s
+    maxMessages: parseInt(process.env.DEBOUNCE_MAX_MESSAGES || '10', 10), // Hard cap de mensagens. Padrão: 10
+  },
 };

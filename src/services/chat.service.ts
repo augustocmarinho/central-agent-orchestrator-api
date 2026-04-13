@@ -6,6 +6,7 @@ import { pluginService } from './plugin.service';
 import { n8nService } from './n8n.service';
 import { queueService } from './queue.service';
 import { conversationService } from './conversation.service';
+import { debounceService } from './debounce.service';
 import { authService } from './auth.service';
 import { v4 as uuidv4 } from 'uuid';
 import { logInfo, logError } from '../utils/logger';
@@ -102,7 +103,42 @@ export class ChatService {
         }
       }
 
-      // 5. Enfileirar mensagem para processamento assíncrono
+      // 5. Verificar debounce (agrupar mensagens sequenciais antes de enviar à IA)
+      // Mensagens agendadas sempre ignoram debounce
+      if (!data.scheduledFor && debounceService.isEnabled()) {
+        const bufferResult = await debounceService.bufferMessage({
+          messageId,
+          conversationId,
+          agentId: data.agentId,
+          userId: data.userId,
+          content: data.content,
+          channel: (data.channel as any) || 'web',
+          channelMetadata: {
+            ...data.channelMetadata,
+            userMessageId: messageId,
+          },
+        });
+
+        // Se o buffer foi preenchido (sem flush imediato), retornar status debouncing
+        if (bufferResult.buffered) {
+          return {
+            conversationId,
+            messageId,
+            status: 'debouncing',
+            message: `Mensagem recebida, aguardando mais mensagens (${bufferResult.messageCount} no buffer)`,
+          };
+        }
+
+        // Se houve flush imediato (hard cap), a mensagem já foi enfileirada pelo flushBuffer
+        return {
+          conversationId,
+          messageId,
+          status: 'processing',
+          message: 'Mensagens agrupadas e enviadas para processamento',
+        };
+      }
+
+      // 6. Enfileirar mensagem para processamento assíncrono (sem debounce)
       const result = await queueService.enqueueMessage({
         conversationId,
         agentId: data.agentId,
@@ -116,14 +152,14 @@ export class ChatService {
         scheduledFor: data.scheduledFor,
       });
 
-      // 6. Retornar imediatamente
+      // 7. Retornar imediatamente
       return {
         conversationId,
         messageId: result.messageId,
         jobId: result.jobId,
         status: result.status || 'processing',
         scheduledFor: result.scheduledFor,
-        message: result.status === 'scheduled' 
+        message: result.status === 'scheduled'
           ? `Mensagem agendada para ${result.scheduledFor?.toISOString()}`
           : 'Mensagem recebida e em processamento',
       };

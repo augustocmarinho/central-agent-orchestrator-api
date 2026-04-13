@@ -9,6 +9,8 @@ import { logInfo, logError, logWarn } from './utils/logger';
 import { closeRedisConnections } from './config/redis.config';
 import { messageConsumer } from './queues/consumers/message.consumer';
 import { messageProducer } from './queues/producers/message.producer';
+import { debounceConsumer } from './queues/consumers/debounce.consumer';
+import { debounceProducer } from './queues/producers/debounce.producer';
 import { responseSubscriber } from './queues/pubsub/subscriber';
 
 const server = http.createServer(app);
@@ -92,6 +94,8 @@ const startServer = async () => {
     logInfo('✅ Sistema de mensageria inicializado');
     logInfo('  - Message Producer: ✓');
     logInfo('  - Message Consumer: ✓');
+    logInfo('  - Debounce Producer: ✓');
+    logInfo('  - Debounce Consumer: ✓');
     logInfo('  - Response Subscriber: ✓');
     
     // Iniciar servidor HTTP
@@ -133,14 +137,20 @@ const gracefulShutdown = async (signal: string) => {
       logInfo('✅ Servidor HTTP encerrado');
     });
     
-    // 2. Fechar consumer (para de processar novos jobs)
+    // 2. Fechar consumers (para de processar novos jobs)
     logInfo('🔄 Fechando Message Consumer...');
     await messageConsumer.close();
-    
-    // 3. Fechar producer
+
+    logInfo('🔄 Fechando Debounce Consumer...');
+    await debounceConsumer.close();
+
+    // 3. Fechar producers
     logInfo('🔄 Fechando Message Producer...');
     await messageProducer.close();
-    
+
+    logInfo('🔄 Fechando Debounce Producer...');
+    await debounceProducer.close();
+
     // 4. Fechar subscriber
     logInfo('🔄 Fechando Response Subscriber...');
     await responseSubscriber.close();

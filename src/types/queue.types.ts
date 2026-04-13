@@ -26,19 +26,24 @@ export interface MessageJob {
 export interface ChannelMetadata {
   // Web/WebSocket
   websocketId?: string;            // ID da conexão WebSocket
-  
+
   // WhatsApp
   phoneNumber?: string;            // Número do WhatsApp
   whatsappChatId?: string;         // ID do chat WhatsApp
-  
+
   // Telegram
   telegramChatId?: string;         // ID do chat Telegram
   telegramUserId?: string;         // ID do usuário Telegram
-  
+
   // API
   callbackUrl?: string;            // URL de callback
   callbackHeaders?: Record<string, string>; // Headers para callback
-  
+
+  // Debounce — preenchido quando mensagens foram agrupadas
+  debounced?: boolean;             // Indica que esta mensagem é um batch
+  debouncedMessageIds?: string[];  // IDs de todas as mensagens originais do batch
+  originalMessageCount?: number;   // Quantidade de mensagens agrupadas
+
   // Genérico
   [key: string]: any;              // Outros metadados customizados
 }
@@ -102,4 +107,10 @@ export interface QueueStats {
   failed: number;
   delayed: number;
   paused: number;
+}
+
+// Job de flush do debounce — dispara quando a janela de debounce expira
+export interface DebounceFlushJob {
+  conversationId: string;
+  agentId: string;
 }
