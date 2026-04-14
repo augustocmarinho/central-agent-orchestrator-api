@@ -14,6 +14,7 @@ import { debounceProducer } from './queues/producers/debounce.producer';
 import { followUpConsumer } from './queues/consumers/followup.consumer';
 import { followUpProducer } from './queues/producers/followup.producer';
 import { responseSubscriber } from './queues/pubsub/subscriber';
+import { startBillingCron, stopBillingCron } from './jobs/billing.cron';
 
 const server = http.createServer(app);
 
@@ -101,6 +102,10 @@ const startServer = async () => {
     logInfo('  - Follow-Up Producer: ✓');
     logInfo('  - Follow-Up Consumer: ✓');
     logInfo('  - Response Subscriber: ✓');
+
+    // Iniciar cron job de billing (reset mensal + expiração de pacotes)
+    startBillingCron();
+    logInfo('  - Billing Cron Job: ✓');
     
     // Iniciar servidor HTTP
     server.listen(config.port, () => {
@@ -160,6 +165,9 @@ const gracefulShutdown = async (signal: string) => {
 
     logInfo('🔄 Fechando Follow-Up Producer...');
     await followUpProducer.close();
+
+    logInfo('🔄 Parando Billing Cron Job...');
+    stopBillingCron();
 
     // 4. Fechar subscriber
     logInfo('🔄 Fechando Response Subscriber...');

@@ -25,6 +25,7 @@ export const REDIS_NAMESPACES = {
   DEBOUNCE_BUFFER: 'debounce:',   // Buffer de mensagens para debounce
   FOLLOWUP_STATE: 'followup:',   // Estado de sequência de follow-up ativa
   FOLLOWUP_CONFIG_CACHE: 'followup_cfg:', // Cache de configuração de follow-up
+  CREDIT_BALANCE: 'credit_bal:', // Cache de saldo de créditos do usuário
 } as const;
 
 // Cliente Redis para operações gerais (histórico, cache, etc)
@@ -143,6 +144,39 @@ export async function invalidateAgentContextCache(agentId: string): Promise<void
 }
 
 // ─── Histórico de chat ──────────────────────────────────────────────
+
+// ─── Cache de saldo de créditos ────────────────────────────────────
+
+const CREDIT_BALANCE_TTL = 60; // 1 minuto
+
+export async function getCreditBalanceCache(userId: string): Promise<any | null> {
+  try {
+    const data = await getRedisClient().get(`${REDIS_NAMESPACES.CREDIT_BALANCE}${userId}`);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCreditBalanceCache(userId: string, balance: any): Promise<void> {
+  try {
+    await getRedisClient().setex(
+      `${REDIS_NAMESPACES.CREDIT_BALANCE}${userId}`,
+      CREDIT_BALANCE_TTL,
+      JSON.stringify(balance)
+    );
+  } catch (error) {
+    logError('Error caching credit balance', error as Error, { userId });
+  }
+}
+
+export async function invalidateCreditBalanceCache(userId: string): Promise<void> {
+  try {
+    await getRedisClient().del(`${REDIS_NAMESPACES.CREDIT_BALANCE}${userId}`);
+  } catch (error) {
+    logError('Error invalidating credit balance cache', error as Error, { userId });
+  }
+}
 
 // Helper: Buscar histórico de chat (compatível com N8N)
 export async function getChatHistory(conversationId: string): Promise<any[]> {

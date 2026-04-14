@@ -72,6 +72,8 @@ export const updateAgentSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(['active', 'paused', 'draft']).optional(),
   creationMode: z.enum(['simple', 'advanced']).optional(),
+  aiModel: z.string().min(1).max(100).optional(),
+  aiProvider: z.string().min(1).max(50).optional(),
   objective: z.string().optional(),
   persona: z.string().optional(),
   audience: z.string().optional(),

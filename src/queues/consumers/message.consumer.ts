@@ -145,6 +145,41 @@ export class MessageConsumer {
         };
       }
 
+      // 1.3. Verificar saldo de créditos do dono do agente
+      const agentOwnerId = agent.userId;
+      if (agentOwnerId) {
+        try {
+          const { creditService } = await import('../../services/credit.service');
+          const balance = await creditService.getUserBalance(agentOwnerId);
+          if (balance.totalBalance <= 0) {
+            logInfo('Message skipped: agent owner has no credits', { agentOwnerId, agentId, channel });
+
+            for (const msgId of allUserMessageIds) {
+              try {
+                await conversationService.updateMessageStatus(msgId, 'delivered', {
+                  processedAt: new Date(),
+                  deliveredAt: new Date(),
+                });
+              } catch (error: any) {
+                logError('Error updating message status for no-credits user', error);
+              }
+            }
+
+            const processingTime = Date.now() - startTime;
+            return {
+              success: true,
+              messageId: id,
+              conversationId,
+              response: undefined,
+              processingTime,
+            };
+          }
+        } catch (error: any) {
+          logError('Error checking credit balance, allowing message', error);
+          // Fail-open: se não conseguir checar saldo, permite a mensagem
+        }
+      }
+
       // 2. Preparar payload para N8N (30%)
       // O N8N vai buscar o histórico automaticamente do Redis (chave: chat:{conversationId})
       job.progress(30);
@@ -232,7 +267,25 @@ export class MessageConsumer {
       job.progress(80);
       await this.publishResponse(job.data, n8nResponseNormalized, processingTime);
 
-      // 5.1 Agendar follow-up automático (se configurado para este agente)
+      // 5.1 Deduzir créditos do dono do agente (non-blocking, fire-and-forget)
+      if (agentOwnerId) {
+        try {
+          const { creditService } = await import('../../services/credit.service');
+          await creditService.deductCredits({
+            userId: agentOwnerId,
+            agentId,
+            messageId: assistantMessageId,
+            tokensUsed: n8nResponseNormalized.tokens_used || 0,
+            model: n8nResponseNormalized.model || 'unknown',
+          });
+        } catch (error: any) {
+          logError('Error deducting credits (non-blocking)', error, {
+            agentOwnerId, agentId, messageId: assistantMessageId,
+          });
+        }
+      }
+
+      // 5.2 Agendar follow-up automático (se configurado para este agente)
       try {
         const { followUpService } = await import('../../services/followup.service');
         await followUpService.scheduleSequence(

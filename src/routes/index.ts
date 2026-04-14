@@ -9,7 +9,13 @@ import { systemTokenController } from '../controllers/systemToken.controller';
 import { toolController } from '../controllers/tool.controller';
 import { whatsappBaileysController } from '../controllers/whatsapp.controller';
 import { followUpController } from '../controllers/followup.controller';
+import { adminController } from '../controllers/admin.controller';
+import { planController } from '../controllers/plan.controller';
+import { aiModelController } from '../controllers/aiModel.controller';
+import { packageController } from '../controllers/package.controller';
+import { usageController } from '../controllers/usage.controller';
 import { authMiddleware } from '../middleware/auth';
+import { adminMiddleware } from '../middleware/admin';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
 
 const router = Router();
@@ -88,5 +94,44 @@ router.post('/whatsapp/baileys/start/:agentId', authMiddleware, whatsappBaileysC
 router.get('/whatsapp/baileys/qrcode/:agentId', authMiddleware, whatsappBaileysController.getQRCode.bind(whatsappBaileysController));
 router.get('/whatsapp/baileys/status/:agentId', authMiddleware, whatsappBaileysController.getStatus.bind(whatsappBaileysController));
 router.delete('/whatsapp/baileys/disconnect/:agentId', authMiddleware, whatsappBaileysController.disconnectSession.bind(whatsappBaileysController));
+
+// AI Models (user-facing — modelos ativos)
+router.get('/models', authMiddleware, aiModelController.listActive.bind(aiModelController));
+
+// Usage routes (user-facing — saldo e consumo)
+router.get('/usage/balance', authMiddleware, usageController.getBalance.bind(usageController));
+router.get('/usage/summary', authMiddleware, usageController.getSummary.bind(usageController));
+router.get('/usage/history', authMiddleware, usageController.getHistory.bind(usageController));
+
+// Admin routes — Stats
+router.get('/admin/stats', authMiddleware, adminMiddleware, adminController.getStats.bind(adminController));
+
+// Admin routes — Users
+router.get('/admin/users', authMiddleware, adminMiddleware, adminController.listUsers.bind(adminController));
+router.get('/admin/users/:id', authMiddleware, adminMiddleware, adminController.getUserDetail.bind(adminController));
+router.post('/admin/users', authMiddleware, adminMiddleware, adminController.createUser.bind(adminController));
+router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, adminController.updateUserRole.bind(adminController));
+router.post('/admin/users/:id/plan', authMiddleware, adminMiddleware, adminController.assignPlanToUser.bind(adminController));
+router.post('/admin/users/:id/packages', authMiddleware, adminMiddleware, adminController.assignPackageToUser.bind(adminController));
+router.post('/admin/users/:id/credits/adjust', authMiddleware, adminMiddleware, adminController.adjustCredits.bind(adminController));
+router.get('/admin/users/:id/usage', authMiddleware, adminMiddleware, adminController.getUserUsage.bind(adminController));
+
+// Admin routes — Plans
+router.get('/admin/plans', authMiddleware, adminMiddleware, planController.list.bind(planController));
+router.post('/admin/plans', authMiddleware, adminMiddleware, planController.create.bind(planController));
+router.put('/admin/plans/:id', authMiddleware, adminMiddleware, planController.update.bind(planController));
+router.delete('/admin/plans/:id', authMiddleware, adminMiddleware, planController.delete.bind(planController));
+
+// Admin routes — AI Models
+router.get('/admin/models', authMiddleware, adminMiddleware, aiModelController.list.bind(aiModelController));
+router.post('/admin/models', authMiddleware, adminMiddleware, aiModelController.create.bind(aiModelController));
+router.put('/admin/models/:id', authMiddleware, adminMiddleware, aiModelController.update.bind(aiModelController));
+router.delete('/admin/models/:id', authMiddleware, adminMiddleware, aiModelController.delete.bind(aiModelController));
+
+// Admin routes — Packages
+router.get('/admin/packages', authMiddleware, adminMiddleware, packageController.list.bind(packageController));
+router.post('/admin/packages', authMiddleware, adminMiddleware, packageController.create.bind(packageController));
+router.put('/admin/packages/:id', authMiddleware, adminMiddleware, packageController.update.bind(packageController));
+router.delete('/admin/packages/:id', authMiddleware, adminMiddleware, packageController.delete.bind(packageController));
 
 export default router;

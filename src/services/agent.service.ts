@@ -24,6 +24,8 @@ export interface UpdateAgentData {
   name?: string;
   status?: 'active' | 'paused' | 'draft';
   creationMode?: 'simple' | 'advanced';
+  aiModel?: string;
+  aiProvider?: string;
   objective?: string;
   persona?: string;
   audience?: string;
@@ -283,7 +285,7 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
     
     try {
       // Atualizar dados básicos do agente
-      if (data.name || data.status) {
+      if (data.name || data.status || data.aiModel || data.aiProvider) {
         const updates: string[] = [];
         const values: any[] = [];
         let paramCount = 1;
@@ -296,6 +298,16 @@ ${knowledgeSource ? 'Utilize as informações fornecidas na base de conhecimento
         if (data.status) {
           updates.push(`status = $${paramCount++}`);
           values.push(data.status);
+        }
+
+        if (data.aiModel) {
+          updates.push(`ai_model = $${paramCount++}`);
+          values.push(data.aiModel);
+        }
+
+        if (data.aiProvider) {
+          updates.push(`ai_provider = $${paramCount++}`);
+          values.push(data.aiProvider);
         }
 
         updates.push(`updated_at = CURRENT_TIMESTAMP`);
