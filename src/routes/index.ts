@@ -8,6 +8,7 @@ import { conversationController } from '../controllers/conversation.controller';
 import { systemTokenController } from '../controllers/systemToken.controller';
 import { toolController } from '../controllers/tool.controller';
 import { whatsappBaileysController } from '../controllers/whatsapp.controller';
+import { followUpController } from '../controllers/followup.controller';
 import { authMiddleware } from '../middleware/auth';
 import { systemAuthMiddleware, flexibleAuthMiddleware } from '../middleware/systemAuth';
 
@@ -46,6 +47,10 @@ router.get('/agents/:agentId/plugins/:pluginId/config', flexibleAuthMiddleware, 
 router.put('/agents/:agentId/plugins/:pluginId/config', authMiddleware, pluginController.updateConfig.bind(pluginController));
 router.post('/agents/:agentId/plugins', authMiddleware, pluginController.install.bind(pluginController));
 router.delete('/agents/:agentId/plugins/:pluginId', authMiddleware, pluginController.uninstall.bind(pluginController));
+
+// Follow-up routes (configuração de follow-up automático por agente)
+router.get('/agents/:agentId/follow-up', authMiddleware, followUpController.getConfig.bind(followUpController));
+router.put('/agents/:agentId/follow-up', authMiddleware, followUpController.updateConfig.bind(followUpController));
 
 // Chat routes (legacy - mantido para compatibilidade)
 router.post('/chat/message', authMiddleware, chatController.sendMessage.bind(chatController));

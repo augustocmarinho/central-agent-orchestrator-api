@@ -23,6 +23,8 @@ export const REDIS_NAMESPACES = {
   PUBSUB_CONVERSATION: 'pubsub:conversation:', // Canais por conversa
   AGENT_CONTEXT: 'agent_ctx:',    // Cache de contexto do agente (agent + tools)
   DEBOUNCE_BUFFER: 'debounce:',   // Buffer de mensagens para debounce
+  FOLLOWUP_STATE: 'followup:',   // Estado de sequência de follow-up ativa
+  FOLLOWUP_CONFIG_CACHE: 'followup_cfg:', // Cache de configuração de follow-up
 } as const;
 
 // Cliente Redis para operações gerais (histórico, cache, etc)

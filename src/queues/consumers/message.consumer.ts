@@ -232,6 +232,20 @@ export class MessageConsumer {
       job.progress(80);
       await this.publishResponse(job.data, n8nResponseNormalized, processingTime);
 
+      // 5.1 Agendar follow-up automático (se configurado para este agente)
+      try {
+        const { followUpService } = await import('../../services/followup.service');
+        await followUpService.scheduleSequence(
+          conversationId,
+          agentId,
+          job.data.channel,
+          job.data.channelMetadata
+        );
+      } catch (error: any) {
+        logError('Error scheduling follow-up', error, { conversationId, agentId });
+        // Non-fatal: não falhar o job de mensagem por causa do follow-up
+      }
+
       // 6. Finalizado (100%)
       job.progress(100);
       

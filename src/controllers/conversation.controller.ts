@@ -214,6 +214,16 @@ export class ConversationController {
         });
       }
 
+      // Cancelar follow-up se conversa foi fechada, pausada ou transferida
+      if (['closed', 'paused', 'transferred'].includes(status)) {
+        try {
+          const { followUpService } = await import('../services/followup.service');
+          await followUpService.cancelSequence(conversationId);
+        } catch (err: any) {
+          logError('Error cancelling follow-up on status change', err as Error);
+        }
+      }
+
       return res.json({
         success: true,
         data: conversation,

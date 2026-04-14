@@ -11,6 +11,8 @@ import { messageConsumer } from './queues/consumers/message.consumer';
 import { messageProducer } from './queues/producers/message.producer';
 import { debounceConsumer } from './queues/consumers/debounce.consumer';
 import { debounceProducer } from './queues/producers/debounce.producer';
+import { followUpConsumer } from './queues/consumers/followup.consumer';
+import { followUpProducer } from './queues/producers/followup.producer';
 import { responseSubscriber } from './queues/pubsub/subscriber';
 
 const server = http.createServer(app);
@@ -96,6 +98,8 @@ const startServer = async () => {
     logInfo('  - Message Consumer: ✓');
     logInfo('  - Debounce Producer: ✓');
     logInfo('  - Debounce Consumer: ✓');
+    logInfo('  - Follow-Up Producer: ✓');
+    logInfo('  - Follow-Up Consumer: ✓');
     logInfo('  - Response Subscriber: ✓');
     
     // Iniciar servidor HTTP
@@ -150,6 +154,12 @@ const gracefulShutdown = async (signal: string) => {
 
     logInfo('🔄 Fechando Debounce Producer...');
     await debounceProducer.close();
+
+    logInfo('🔄 Fechando Follow-Up Consumer...');
+    await followUpConsumer.close();
+
+    logInfo('🔄 Fechando Follow-Up Producer...');
+    await followUpProducer.close();
 
     // 4. Fechar subscriber
     logInfo('🔄 Fechando Response Subscriber...');

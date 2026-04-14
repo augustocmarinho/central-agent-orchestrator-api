@@ -80,7 +80,16 @@ export class ChatService {
         // Não falhar se der erro ao salvar mensagem, apenas logar
       }
 
-      // 4.1. Notificar clientes WebSocket sobre a nova mensagem do usuário
+      // 4.1. Cancelar sequência de follow-up ativa (usuário respondeu)
+      try {
+        const { followUpService } = await import('./followup.service');
+        await followUpService.cancelSequence(conversationId);
+      } catch (error: any) {
+        logError('Error cancelling follow-up sequence', error);
+        // Non-fatal
+      }
+
+      // 4.2. Notificar clientes WebSocket sobre a nova mensagem do usuário
       // Apenas para canais externos (WhatsApp, Telegram, etc.). No canal web o
       // ChatWebSocket já faz broadcast com senderSocketId, evitando duplicata no front.
       if (data.channel && data.channel !== 'web') {
