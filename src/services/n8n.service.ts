@@ -188,33 +188,82 @@ export class N8nService {
   }
 
   /**
-   * Chama o workflow "OpenAI Chat with Redis" específico
-   * Usado pelo sistema de filas
+   * Chama o workflow "OpenAI Chat with Redis" específico.
+   * Backend envia o histórico já preparado (summary + janela recente) — n8n não toca mais no Redis.
+   *
+   * mode:
+   *   'normal'     → fluxo padrão de mensagem do usuário.
+   *   'evaluation' → chamada interna do follow-up (avalia se deve enviar / gera o texto).
+   *                  n8n trata igual, mas o backend não persiste o turno depois.
    */
   async callOpenAIChatWorkflow(data: {
     agent_id: string;
     message: string;
     conversation_id: string;
+    mode?: 'normal' | 'evaluation';
+    history?: Array<{ role: string; content: string }>;
+    summary?: string | null;
   }): Promise<any> {
     try {
-      console.log('🤖 Chamando N8N workflow: OpenAI Chat with Redis');
-      
+      console.log('🤖 Chamando N8N workflow: OpenAI Chat with Redis', { mode: data.mode || 'normal' });
+
+      const payload = {
+        agent_id: data.agent_id,
+        message: data.message,
+        conversation_id: data.conversation_id,
+        mode: data.mode || 'normal',
+        history: data.history || [],
+        summary: data.summary || null,
+      };
+
       const response = await axios.post(
         `${this.baseUrl}/webhook/openai-chat`,
-        data,
+        payload,
         {
           headers: {
             'Content-Type': 'application/json',
           },
-          timeout: 90000, // 90 segundos (OpenAI pode demorar)
+          timeout: 90000,
         }
       );
-      
+
       console.log('✅ N8N workflow concluído');
-      
+
       return response.data;
     } catch (error: any) {
       console.error('❌ Erro ao chamar N8N workflow:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Chama o workflow "Summarize History" para compactar mensagens antigas.
+   * Recebe o pedaço de histórico a comprimir + resumo anterior (se houver) e retorna o novo resumo.
+   */
+  async callSummarizationWorkflow(data: {
+    agent_id: string;
+    conversation_id: string;
+    messages: Array<{ role: string; content: string }>;
+    previous_summary: string | null;
+  }): Promise<{ summary: string }> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/webhook/summarize-history`,
+        data,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 60000,
+        }
+      );
+
+      const summary =
+        (response.data && typeof response.data.summary === 'string' && response.data.summary) ||
+        (response.data && typeof response.data === 'string' && response.data) ||
+        '';
+
+      return { summary: summary.trim() };
+    } catch (error: any) {
+      console.error('❌ Erro ao chamar workflow de sumarização:', error.message);
       throw error;
     }
   }

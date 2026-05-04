@@ -4,6 +4,7 @@ import { FollowUpJob, FollowUpState } from '../../types/followup.types';
 import { conversationService } from '../../services/conversation.service';
 import { agentService } from '../../services/agent.service';
 import { followUpService } from '../../services/followup.service';
+import { chatHistoryService } from '../../services/chatHistory.service';
 import { responsePublisher } from '../pubsub';
 import { logInfo, logError, logWarn } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -173,6 +174,23 @@ export class FollowUpConsumer {
       });
     } catch (error: any) {
       logError('Error publishing follow-up response', error, { conversationId, stepOrder });
+    }
+
+    // ─── Atualizar histórico Redis ───────────────────────────────────
+    // Persiste a mensagem real entregue ao cliente + nota de sistema indicando o passo enviado.
+    // A nota dá contexto à IA na próxima resposta ("já mandei follow-up X há Y minutos") sem
+    // expor o prompt sintético de avaliação (que continua fora do histórico graças ao mode='evaluation').
+    try {
+      await chatHistoryService.appendMessages(conversationId, agentId, [
+        { role: 'assistant', content: messageContent },
+        {
+          role: 'system',
+          content: `[Follow-up passo ${stepOrder}/${state.totalSteps} enviado em ${new Date().toISOString()}]`,
+        },
+      ]);
+    } catch (error: any) {
+      logError('Error appending follow-up to chat history', error, { conversationId, stepOrder });
+      // Non-fatal: a mensagem já foi entregue.
     }
 
     logInfo('✅ Follow-up sent', {

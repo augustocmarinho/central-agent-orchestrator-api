@@ -5,6 +5,7 @@ import { agentService } from '../../services/agent.service';
 import { conversationService } from '../../services/conversation.service';
 import { logInfo, logError, logWarn } from '../../utils/logger';
 import { n8nService } from '../../services/n8n.service';
+import { chatHistoryService } from '../../services/chatHistory.service';
 import { responsePublisher } from '../pubsub';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -181,18 +182,26 @@ export class MessageConsumer {
       }
 
       // 2. Preparar payload para N8N (30%)
-      // O N8N vai buscar o histórico automaticamente do Redis (chave: chat:{conversationId})
+      // Backend é dono do Redis: monta o histórico (summary + janela recente) e envia inline.
       job.progress(30);
+      const { summary, recentMessages } = await chatHistoryService.buildN8nPayload(conversationId);
       const n8nPayload = {
         agent_id: agentId,
         message: message,
         conversation_id: conversationId,
+        mode: 'normal' as const,
+        summary,
+        history: recentMessages.map((m) => ({ role: m.role, content: m.content })),
       };
 
       // 3. Chamar workflow N8N (50% - etapa mais demorada)
       job.progress(50);
-      logInfo('Calling N8N workflow (OpenAI Chat with Redis)', { conversationId });
-      
+      logInfo('Calling N8N workflow (OpenAI Chat with Redis)', {
+        conversationId,
+        historyLength: recentMessages.length,
+        hasSummary: !!summary,
+      });
+
       const n8nResponse = await n8nService.callOpenAIChatWorkflow(n8nPayload);
 
       // Aceitar message em response direto ou aninhado (workflow pode retornar { message } ou { response: { message } })
@@ -261,6 +270,17 @@ export class MessageConsumer {
       } catch (error: any) {
         logError('Error saving assistant message', error);
         // Não falhar o job por erro ao salvar no MongoDB
+      }
+
+      // 4.1. Atualizar histórico Redis (turno do usuário + resposta do assistente)
+      try {
+        await chatHistoryService.appendMessages(conversationId, agentId, [
+          { role: 'user', content: message },
+          { role: 'assistant', content: n8nResponseNormalized.message },
+        ]);
+      } catch (error: any) {
+        logError('Error appending messages to chat history', error, { conversationId });
+        // Non-fatal: a mensagem já foi entregue, falha no cache não derruba o turno.
       }
 
       // 5. Publicar resposta no PubSub (80%)

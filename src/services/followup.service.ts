@@ -3,6 +3,7 @@ import { getRedisClient, REDIS_NAMESPACES } from '../config/redis.config';
 import { conversationService } from './conversation.service';
 import { agentService } from './agent.service';
 import { n8nService } from './n8n.service';
+import { chatHistoryService } from './chatHistory.service';
 import { logInfo, logError, logWarn } from '../utils/logger';
 import {
   FollowUpConfig,
@@ -342,11 +343,7 @@ export class FollowUpService {
     messageType: 'custom' | 'ai_generated',
     customMessage?: string
   ): Promise<{ shouldSend: boolean; message?: string }> {
-    // Salvar histórico Redis ANTES da chamada n8n (para restaurar depois)
-    const redis = getRedisClient();
-    const historyKey = `${REDIS_NAMESPACES.CHAT_HISTORY}${conversationId}`;
-    const historyBackup = await redis.get(historyKey);
-
+    // mode:'evaluation' faz o n8n NÃO persistir o turno no Redis (eliminamos backup/restore frágil).
     try {
       const agent = await agentService.getAgentByIdForSystem(agentId);
       const agentName = agent?.name || 'Assistente';
@@ -407,15 +404,18 @@ export class FollowUpService {
         ].join('\n');
       }
 
+      // Backend monta o histórico atual e envia inline. Como mode='evaluation',
+      // o workflow n8n NÃO grava esse turno no Redis — não há mais poluição com prompt sintético.
+      const { summary, recentMessages } = await chatHistoryService.buildN8nPayload(conversationId);
+
       const n8nResponse = await n8nService.callOpenAIChatWorkflow({
         agent_id: agentId,
         message: syntheticMessage,
         conversation_id: conversationId,
+        mode: 'evaluation',
+        summary,
+        history: recentMessages.map((m) => ({ role: m.role, content: m.content })),
       });
-
-      // CRÍTICO: Restaurar histórico Redis para não poluir a conversa
-      // A chamada n8n salva a instrução sintética + resposta no Redis — precisamos reverter
-      await this.restoreRedisHistory(historyKey, historyBackup);
 
       const responseText =
         (n8nResponse && typeof n8nResponse.message === 'string' && n8nResponse.message) ||
@@ -450,9 +450,6 @@ export class FollowUpService {
         return { shouldSend: true, message: customMessage };
       }
     } catch (error: any) {
-      // Restaurar histórico mesmo em caso de erro
-      await this.restoreRedisHistory(historyKey, historyBackup);
-
       logError('Error in follow-up evaluation', error, { conversationId, agentId, stepOrder });
       if (messageType === 'custom') {
         return { shouldSend: true, message: customMessage };
@@ -461,24 +458,6 @@ export class FollowUpService {
         shouldSend: true,
         message: 'Olá! Notei que ainda não respondeu. Posso ajudar com mais alguma coisa?',
       };
-    }
-  }
-
-  /**
-   * Restaura o histórico Redis da conversa ao estado anterior à chamada de avaliação.
-   * Impede que a instrução sintética e a resposta da IA poluam o contexto da conversa.
-   */
-  private async restoreRedisHistory(historyKey: string, backup: string | null): Promise<void> {
-    try {
-      const redis = getRedisClient();
-      if (backup) {
-        await redis.setex(historyKey, 604800, backup); // 7 dias TTL (mesmo do n8n)
-      } else {
-        await redis.del(historyKey);
-      }
-      logInfo('Redis history restored after follow-up evaluation', { historyKey });
-    } catch (error: any) {
-      logError('Error restoring Redis history after follow-up evaluation', error);
     }
   }
 
