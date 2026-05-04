@@ -1,5 +1,6 @@
 import { query } from '../db/postgres';
 import { v4 as uuidv4 } from 'uuid';
+import { invalidateCalendarTzCache } from '../config/redis.config';
 
 export interface Plugin {
   id: string;
@@ -194,6 +195,11 @@ export class PluginService {
          updated_at = CURRENT_TIMESTAMP`,
       [agentPluginId, configKey, valueStr]
     );
+
+    // Cache de fuso horário do calendário pode ter mudado — invalida.
+    if (pluginId === 'plugin.calendar') {
+      await invalidateCalendarTzCache(agentId);
+    }
   }
 }
 

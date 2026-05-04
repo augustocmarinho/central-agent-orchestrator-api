@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { config } from '../config';
+import { pluginService } from './plugin.service';
+import { getCalendarTzCache, setCalendarTzCache } from '../config/redis.config';
 
 export interface N8nAgentContext {
   agentId: string;
@@ -207,6 +209,8 @@ export class N8nService {
     try {
       console.log('🤖 Chamando N8N workflow: OpenAI Chat with Redis', { mode: data.mode || 'normal' });
 
+      const timezone = await this.resolveAgentTimezone(data.agent_id);
+
       const payload = {
         agent_id: data.agent_id,
         message: data.message,
@@ -214,6 +218,7 @@ export class N8nService {
         mode: data.mode || 'normal',
         history: data.history || [],
         summary: data.summary || null,
+        timezone,
       };
 
       const response = await axios.post(
@@ -240,6 +245,27 @@ export class N8nService {
    * Chama o workflow "Summarize History" para compactar mensagens antigas.
    * Recebe o pedaço de histórico a comprimir + resumo anterior (se houver) e retorna o novo resumo.
    */
+  /**
+   * Resolve o fuso horário do agente a partir do plugin.calendar (com cache Redis 60s).
+   * Default: America/Sao_Paulo se o plugin não estiver instalado ou sem timezone configurado.
+   */
+  private async resolveAgentTimezone(agentId: string): Promise<string> {
+    const cached = await getCalendarTzCache(agentId);
+    if (cached) return cached;
+    let tz = 'America/Sao_Paulo';
+    try {
+      const cfg = await pluginService.getPluginConfig(agentId, 'plugin.calendar');
+      const fromCfg = (cfg?.config as { timezone?: string } | undefined)?.timezone;
+      if (typeof fromCfg === 'string' && fromCfg.trim()) {
+        tz = fromCfg.trim();
+      }
+    } catch {
+      // ignore — usa default
+    }
+    await setCalendarTzCache(agentId, tz);
+    return tz;
+  }
+
   async callSummarizationWorkflow(data: {
     agent_id: string;
     conversation_id: string;

@@ -4,6 +4,7 @@ import calendarPlugin from './calendar/handler';
 export interface PluginExecuteContext {
   agentId: string;
   conversationId?: string;
+  toolCallId?: string;
 }
 
 export interface PluginHandler {

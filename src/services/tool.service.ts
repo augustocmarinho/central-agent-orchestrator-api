@@ -81,7 +81,7 @@ export class ToolService {
     agentId: string,
     params: { call_id: string; name: string; arguments: string; conversationId?: string }
   ): Promise<string> {
-    const { name, arguments: argsStr, conversationId } = params;
+    const { name, arguments: argsStr, conversationId, call_id: toolCallId } = params;
 
     // Parsear argumentos antes de qualquer execução
     let parsedArgs: Record<string, unknown> = {};
@@ -115,7 +115,7 @@ export class ToolService {
 
     const config = await pluginService.getPluginConfig(agentId, pluginId);
     const action = getActionFromToolName(name, pluginId);
-    const context: PluginExecuteContext = { agentId, conversationId };
+    const context: PluginExecuteContext = { agentId, conversationId, toolCallId };
     const result = await (handler as { execute: (a: string, d: Record<string, unknown>, c: Record<string, unknown>, ctx?: PluginExecuteContext) => Promise<unknown> }).execute(
       action,
       parsedArgs,

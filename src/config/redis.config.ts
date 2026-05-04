@@ -26,6 +26,7 @@ export const REDIS_NAMESPACES = {
   FOLLOWUP_STATE: 'followup:',   // Estado de sequência de follow-up ativa
   FOLLOWUP_CONFIG_CACHE: 'followup_cfg:', // Cache de configuração de follow-up
   CREDIT_BALANCE: 'credit_bal:', // Cache de saldo de créditos do usuário
+  CALENDAR_TZ: 'cal_tz:', // Cache do fuso horário do plugin.calendar por agente
 } as const;
 
 // Cliente Redis para operações gerais (histórico, cache, etc)
@@ -175,6 +176,34 @@ export async function invalidateCreditBalanceCache(userId: string): Promise<void
     await getRedisClient().del(`${REDIS_NAMESPACES.CREDIT_BALANCE}${userId}`);
   } catch (error) {
     logError('Error invalidating credit balance cache', error as Error, { userId });
+  }
+}
+
+// ─── Cache do fuso horário do plugin.calendar por agente ───────────
+
+const CALENDAR_TZ_TTL = 60; // 1 minuto — usado a cada mensagem; invalidado em updatePluginConfig
+
+export async function getCalendarTzCache(agentId: string): Promise<string | null> {
+  try {
+    return await getRedisClient().get(`${REDIS_NAMESPACES.CALENDAR_TZ}${agentId}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function setCalendarTzCache(agentId: string, tz: string): Promise<void> {
+  try {
+    await getRedisClient().setex(`${REDIS_NAMESPACES.CALENDAR_TZ}${agentId}`, CALENDAR_TZ_TTL, tz);
+  } catch (error) {
+    logError('Error caching calendar timezone', error as Error, { agentId });
+  }
+}
+
+export async function invalidateCalendarTzCache(agentId: string): Promise<void> {
+  try {
+    await getRedisClient().del(`${REDIS_NAMESPACES.CALENDAR_TZ}${agentId}`);
+  } catch (error) {
+    logError('Error invalidating calendar timezone cache', error as Error, { agentId });
   }
 }
 
